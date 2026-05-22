@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+openai
+requests
+python-dotenv
+python-multipart
+moviepy
