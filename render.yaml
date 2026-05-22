@@ -1,0 +1,26 @@
+# Render 一键部署配置
+# 用法：访问 https://dashboard.render.com/import → 选择 GitHub 仓库 → Render 会自动读取此文件
+
+services:
+  # ── 后端 API 服务（FastAPI）─────────────────────────────
+  - type: web
+    name: movieagent-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: PORT
+        value: 8000
+      # ⚠️ 下面这些需要在 Render 控制台手动填入你的真实 Key
+      - key: SILICONFLOW_API_KEY
+        sync: false
+      - key: VOLC_ACCESS_KEY
+        sync: false
+      - key: VOLC_SECRET_KEY
+        sync: false
+      - key: YIZHAN_API_KEY
+        sync: false
+      - key: ARK_API_KEY
+        sync: false
