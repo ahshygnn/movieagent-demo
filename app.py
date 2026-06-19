@@ -12,10 +12,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import config
-from pipeline import tasks, create_task, run_full_pipeline
+from pipeline import tasks, create_task, run_full_pipeline, save_tasks
 
 from generation.image import generate_keyframe
 from generation.video import generate_video
+from generation.postprocess import postprocess_shot_video
 
 app = FastAPI(title="MovieAgent Demo API", version="1.0.0")
 
@@ -31,6 +32,7 @@ app.add_middleware(
 os.makedirs("outputs/keyframes", exist_ok=True)
 os.makedirs("outputs/videos", exist_ok=True)
 os.makedirs("outputs/audio", exist_ok=True)
+os.makedirs("outputs/subtitles", exist_ok=True)
 os.makedirs("outputs/characters", exist_ok=True)
 app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 
@@ -246,15 +248,51 @@ def api_generate_video(req: VideoRequest):
         shot_data.get("Coarse Plot", "")
     ).strip()
 
-    result = generate_video(shot_id, keyframe_path, motion_prompt)
+    try:
+        result = generate_video(shot_id, keyframe_path, motion_prompt)
+        raw_video_path = result["local_path"]
+        merged_voice = dict(task.get("voice_refs") or {})
+        post_result = postprocess_shot_video(
+            shot_id,
+            raw_video_path,
+            shot_data,
+            merged_voice,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     shot_ref = tasks[req.task_id]["shots"][req.sub_script_name][req.scene_name]["Shot"][req.shot_name]
-    shot_ref["video_local_path"] = result["local_path"]
-    shot_ref["video_url"] = f"/outputs/videos/{shot_id}.mp4"
+    shot_ref["raw_video_local_path"] = raw_video_path
+    shot_ref["raw_video_url"] = f"/outputs/videos/{shot_id}.mp4"
+    shot_ref["enhanced_video_local_path"] = (
+        post_result["local_path"] if post_result.get("dubbed") else None
+    )
+    shot_ref["video_local_path"] = post_result["local_path"]
+    shot_ref["video_url"] = (
+        f"/outputs/videos/{shot_id}_dubbed.mp4"
+        if post_result.get("dubbed")
+        else f"/outputs/videos/{shot_id}.mp4"
+    )
+    shot_ref["subtitle_local_path"] = post_result.get("subtitle_local_path")
+    shot_ref["subtitle_url"] = (
+        f"/outputs/subtitles/{shot_id}.srt"
+        if shot_ref.get("subtitle_local_path")
+        else None
+    )
+    shot_ref["combined_audio_local_path"] = post_result.get("combined_audio_local_path")
+    shot_ref["audio_files"] = post_result.get("audio_files") or {}
+    shot_ref["video_has_dubbing"] = bool(post_result.get("dubbed"))
     shot_ref["video_status"] = "done"
+    save_tasks()
 
     return {
-        "video_url": f"/outputs/videos/{shot_id}.mp4",
+        "video_url": shot_ref["video_url"],
+        "raw_video_url": shot_ref["raw_video_url"],
+        "subtitle_url": shot_ref["subtitle_url"],
+        "audio_files": shot_ref["audio_files"],
+        "has_dubbing": shot_ref["video_has_dubbing"],
         "elapsed_seconds": result["elapsed_seconds"]
     }
 
@@ -273,9 +311,11 @@ def _collect_video_paths_for_final(task: dict, sub_script_names: list[str]) -> l
         for _scene_name, scene_data in scenes_dict.items():
             shot_dict = (scene_data or {}).get("Shot") or {}
             for _shot_name, shot_data in shot_dict.items():
-                vp = (shot_data or {}).get("video_local_path")
-                if vp and isinstance(vp, str) and os.path.isfile(vp):
-                    paths.append(vp)
+                for key in ("enhanced_video_local_path", "video_local_path", "raw_video_local_path"):
+                    vp = (shot_data or {}).get(key)
+                    if vp and isinstance(vp, str) and os.path.isfile(vp):
+                        paths.append(vp)
+                        break
     return paths
 
 
@@ -495,9 +535,15 @@ def api_generate_audio(req: AudioRequest):
     }
     audio_files = {}
     for char_name, line_text in subtitles.items():
-        if char_name not in merged_voice:
-            continue
-        voice_uri = merged_voice[char_name]
+        voice_uri = merged_voice.get(char_name) or config.DEFAULT_TTS_VOICE
+        if not voice_uri:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"角色 {char_name} 没有可用音色：请上传角色参考音频，"
+                    "或在 .env 中配置 DEFAULT_TTS_VOICE。"
+                ),
+            )
         payload = {
             "model": "FunAudioLLM/CosyVoice2-0.5B",
             "input": line_text,
@@ -522,6 +568,9 @@ def api_generate_audio(req: AudioRequest):
         with open(local_path, "wb") as f:
             f.write(resp.content)
         audio_files[char_name] = local_path
+
+    tasks[req.task_id]["shots"][req.sub_script_name][req.scene_name]["Shot"][req.shot_name]["audio_files"] = audio_files
+    save_tasks()
 
     return {"audio_files": audio_files}
 

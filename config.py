@@ -7,6 +7,9 @@ load_dotenv(Path(__file__).parent / ".env")
 
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "").strip()
 BASE_URL = "https://api.siliconflow.cn/v1"
+DEFAULT_TTS_VOICE = os.getenv("DEFAULT_TTS_VOICE", "").strip()
+SUBTITLE_FONT = os.getenv("SUBTITLE_FONT", "Microsoft YaHei").strip() or "Microsoft YaHei"
+SUBTITLE_FONT_SIZE = int(os.getenv("SUBTITLE_FONT_SIZE", "28"))
 
 # 火山引擎签名鉴权（即梦图片生成 4.0）
 VOLC_ACCESS_KEY = os.getenv("VOLC_ACCESS_KEY", "")

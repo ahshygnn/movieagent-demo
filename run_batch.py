@@ -41,6 +41,7 @@ from pathlib import Path
 from pipeline import tasks, create_task, run_full_pipeline
 from generation.image import generate_keyframe
 from generation.video import generate_video
+from generation.postprocess import postprocess_shot_video
 
 VIDEO_SLEEP = 3
 
@@ -263,9 +264,35 @@ def main():
 
         try:
             result = generate_video(shot_id, keyframe_path, motion_prompt)
-            tasks[task_id]["shots"][ss][sc]["Shot"][sh]["video_local_path"] = result["local_path"]
-            tasks[task_id]["shots"][ss][sc]["Shot"][sh]["video_url"] = f"/outputs/videos/{shot_id}.mp4"
-            tasks[task_id]["shots"][ss][sc]["Shot"][sh]["video_status"] = "done"
+            raw_video_path = result["local_path"]
+            post_result = postprocess_shot_video(
+                shot_id,
+                raw_video_path,
+                shot_data,
+                tasks[task_id].get("voice_refs") or {},
+            )
+            shot_ref = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
+            shot_ref["raw_video_local_path"] = raw_video_path
+            shot_ref["raw_video_url"] = f"/outputs/videos/{shot_id}.mp4"
+            shot_ref["enhanced_video_local_path"] = (
+                post_result["local_path"] if post_result.get("dubbed") else None
+            )
+            shot_ref["video_local_path"] = post_result["local_path"]
+            shot_ref["video_url"] = (
+                f"/outputs/videos/{shot_id}_dubbed.mp4"
+                if post_result.get("dubbed")
+                else f"/outputs/videos/{shot_id}.mp4"
+            )
+            shot_ref["subtitle_local_path"] = post_result.get("subtitle_local_path")
+            shot_ref["subtitle_url"] = (
+                f"/outputs/subtitles/{shot_id}.srt"
+                if shot_ref.get("subtitle_local_path")
+                else None
+            )
+            shot_ref["combined_audio_local_path"] = post_result.get("combined_audio_local_path")
+            shot_ref["audio_files"] = post_result.get("audio_files") or {}
+            shot_ref["video_has_dubbing"] = bool(post_result.get("dubbed"))
+            shot_ref["video_status"] = "done"
             log(f"  ✅ 视频完成，耗时 {result['elapsed_seconds']:.1f}s")
             save_progress()
         except Exception as e:
