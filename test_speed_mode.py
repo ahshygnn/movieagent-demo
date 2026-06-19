@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from generation.concat import _concat_list_line
 from generation.video import build_video_prompt
@@ -19,6 +20,17 @@ class SpeedModeConfigTests(unittest.TestCase):
         self.assertTrue(line.startswith("file '"))
         self.assertTrue(line.endswith("'\n"))
         self.assertIn("shot one.mp4", line)
+
+    def test_draft_mode_keeps_dubbing_enabled_by_default(self):
+        with mock.patch.dict("os.environ", {"GENERATION_MODE": "draft"}, clear=True):
+            import importlib
+            import config
+
+            reloaded = importlib.reload(config)
+            self.assertEqual(reloaded.GENERATION_MODE, "draft")
+            self.assertTrue(reloaded.ENABLE_DUBBING)
+            self.assertEqual(reloaded.VIDEO_DURATION_SECONDS, 3)
+            importlib.reload(config)
 
 
 if __name__ == "__main__":
