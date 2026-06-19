@@ -76,12 +76,19 @@ def moviepy_concat(video_paths: list[str], output_path: str) -> None:
         for path in video_paths:
             clips.append(VideoFileClip(path))
         final_clip = concatenate_videoclips(clips, method="compose")
-        final_clip.write_videofile(
-            output_path,
-            codec="libx264",
-            audio_codec="aac",
-            verbose=False,
-        )
+        try:
+            final_clip.write_videofile(
+                output_path,
+                codec="libx264",
+                audio_codec="aac",
+                logger=None,
+            )
+        except TypeError:
+            final_clip.write_videofile(
+                output_path,
+                codec="libx264",
+                audio_codec="aac",
+            )
     finally:
         for clip in clips:
             try:

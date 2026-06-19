@@ -158,13 +158,19 @@ def _combine_audio(audio_paths: list[str], output_path: str, pause_seconds: floa
                 )
         final_clip = concatenate_audioclips(clips)
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        final_clip.write_audiofile(
-            output_path,
-            fps=44100,
-            codec="libmp3lame",
-            verbose=False,
-            logger=None,
-        )
+        try:
+            final_clip.write_audiofile(
+                output_path,
+                fps=44100,
+                codec="libmp3lame",
+                logger=None,
+            )
+        except TypeError:
+            final_clip.write_audiofile(
+                output_path,
+                fps=44100,
+                codec="libmp3lame",
+            )
         return output_path
     finally:
         for clip in clips:
