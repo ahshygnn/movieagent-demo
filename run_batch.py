@@ -38,10 +38,12 @@ import sys
 import shutil
 from pathlib import Path
 
+import config
 from pipeline import tasks, create_task, run_full_pipeline
 from generation.image import generate_keyframe
 from generation.video import generate_video
 from generation.postprocess import postprocess_shot_video
+from generation.concat import concat_videos
 
 VIDEO_SLEEP = 3
 
@@ -265,12 +267,21 @@ def main():
         try:
             result = generate_video(shot_id, keyframe_path, motion_prompt)
             raw_video_path = result["local_path"]
-            post_result = postprocess_shot_video(
-                shot_id,
-                raw_video_path,
-                shot_data,
-                tasks[task_id].get("voice_refs") or {},
-            )
+            if config.ENABLE_DUBBING:
+                post_result = postprocess_shot_video(
+                    shot_id,
+                    raw_video_path,
+                    shot_data,
+                    tasks[task_id].get("voice_refs") or {},
+                )
+            else:
+                post_result = {
+                    "local_path": raw_video_path,
+                    "dubbed": False,
+                    "audio_files": {},
+                    "subtitle_local_path": None,
+                    "combined_audio_local_path": None,
+                }
             shot_ref = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
             shot_ref["raw_video_local_path"] = raw_video_path
             shot_ref["raw_video_url"] = f"/outputs/videos/{shot_id}.mp4"
@@ -292,6 +303,9 @@ def main():
             shot_ref["combined_audio_local_path"] = post_result.get("combined_audio_local_path")
             shot_ref["audio_files"] = post_result.get("audio_files") or {}
             shot_ref["video_has_dubbing"] = bool(post_result.get("dubbed"))
+            shot_ref["generation_mode"] = config.GENERATION_MODE
+            shot_ref["video_duration_seconds"] = result.get("duration_seconds")
+            shot_ref["video_resolution"] = result.get("resolution")
             shot_ref["video_status"] = "done"
             log(f"  ✅ 视频完成，耗时 {result['elapsed_seconds']:.1f}s")
             save_progress()
@@ -319,29 +333,12 @@ def main():
 
     log(f"共 {len(video_paths)} 个片段待拼接")
 
-    try:
-        from moviepy.editor import VideoFileClip, concatenate_videoclips
-    except ImportError:
-        log("❌ 请先安装 moviepy：pip install moviepy")
-        sys.exit(1)
-
     out_path = f"outputs/videos/{task_id}_final.mp4"
-    clips, final = [], None
     try:
-        for p in video_paths:
-            clips.append(VideoFileClip(p))
-        final = concatenate_videoclips(clips, method="compose")
-        final.write_videofile(out_path, codec="libx264", audio_codec="aac", verbose=False)
-        log(f"\n🎉 成片已保存：{out_path}")
+        concat_method = concat_videos(video_paths, out_path, prefer_fast=True)
+        log(f"\n🎉 成片已保存：{out_path}（拼接方式：{concat_method}）")
     except Exception as e:
         log(f"❌ 拼接失败: {e}")
-    finally:
-        for c in clips:
-            try: c.close()
-            except Exception: pass
-        if final:
-            try: final.close()
-            except Exception: pass
 
     # ── 完成 ────────────────────────────────────────────────────
     log("\n" + "=" * 60)

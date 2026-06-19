@@ -97,10 +97,18 @@ Output your final result in the following JSON format:
 Please ensure the output is in JSON format"""
 
 from agents.base_agent import BaseAgent
+import config
 
 
 def run_shot_agent(scene_details: dict) -> dict:
     agent = BaseAgent(system_prompt=SHOT_PROMPT, temp=0.7)
+    shot_count_instruction = ""
+    if config.SHOT_MAX_PER_SCENE > 0:
+        shot_count_instruction = (
+            f'\n- Generation mode: "{config.GENERATION_MODE}". '
+            f"Create no more than {config.SHOT_MAX_PER_SCENE} essential shots for this scene. "
+            "Prioritize story clarity and avoid transitional or redundant shots."
+        )
     query = f"""Given the following Scene Details:
 - Involving Characters: "{scene_details['Involving Characters']}"
 - Plot: "{scene_details['Plot']}"
@@ -108,6 +116,7 @@ def run_shot_agent(scene_details: dict) -> dict:
 - Emotional Tone: "{scene_details['Emotional Tone']}"
 - Key Props: {scene_details['Key Props']}
 - Cinematography Notes: "{scene_details['Cinematography Notes']}"
+{shot_count_instruction}
 """
     result = agent(query, parse=True)
     return {"result": result, "usage": agent.get_usage()}

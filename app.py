@@ -17,6 +17,7 @@ from pipeline import tasks, create_task, run_full_pipeline, save_tasks
 from generation.image import generate_keyframe
 from generation.video import generate_video
 from generation.postprocess import postprocess_shot_video
+from generation.concat import concat_videos
 
 app = FastAPI(title="MovieAgent Demo API", version="1.0.0")
 
@@ -251,13 +252,22 @@ def api_generate_video(req: VideoRequest):
     try:
         result = generate_video(shot_id, keyframe_path, motion_prompt)
         raw_video_path = result["local_path"]
-        merged_voice = dict(task.get("voice_refs") or {})
-        post_result = postprocess_shot_video(
-            shot_id,
-            raw_video_path,
-            shot_data,
-            merged_voice,
-        )
+        if config.ENABLE_DUBBING:
+            merged_voice = dict(task.get("voice_refs") or {})
+            post_result = postprocess_shot_video(
+                shot_id,
+                raw_video_path,
+                shot_data,
+                merged_voice,
+            )
+        else:
+            post_result = {
+                "local_path": raw_video_path,
+                "dubbed": False,
+                "audio_files": {},
+                "subtitle_local_path": None,
+                "combined_audio_local_path": None,
+            }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -284,6 +294,9 @@ def api_generate_video(req: VideoRequest):
     shot_ref["combined_audio_local_path"] = post_result.get("combined_audio_local_path")
     shot_ref["audio_files"] = post_result.get("audio_files") or {}
     shot_ref["video_has_dubbing"] = bool(post_result.get("dubbed"))
+    shot_ref["generation_mode"] = config.GENERATION_MODE
+    shot_ref["video_duration_seconds"] = result.get("duration_seconds")
+    shot_ref["video_resolution"] = result.get("resolution")
     shot_ref["video_status"] = "done"
     save_tasks()
 
@@ -293,6 +306,9 @@ def api_generate_video(req: VideoRequest):
         "subtitle_url": shot_ref["subtitle_url"],
         "audio_files": shot_ref["audio_files"],
         "has_dubbing": shot_ref["video_has_dubbing"],
+        "generation_mode": shot_ref["generation_mode"],
+        "duration_seconds": shot_ref["video_duration_seconds"],
+        "resolution": shot_ref["video_resolution"],
         "elapsed_seconds": result["elapsed_seconds"]
     }
 
@@ -337,45 +353,11 @@ def api_generate_final_video(req: FinalVideoRequest):
     out_path = os.path.join("outputs/videos", f"{req.task_id}_final.mp4")
 
     try:
-        from moviepy.editor import VideoFileClip, concatenate_videoclips
-    except ImportError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "未安装 moviepy：在项目目录执行 pip install moviepy（需已安装 ffmpeg）。"
-                "若 pip 因代理超时失败，请切换网络或配置 pip 代理后再试。"
-            ),
-        ) from e
-
-    clips: list = []
-    final_clip = None
-    try:
-        for p in paths:
-            clips.append(VideoFileClip(p))
-        final_clip = concatenate_videoclips(clips, method="compose")
-        final_clip.write_videofile(
-            out_path,
-            codec="libx264",
-            audio_codec="aac",
-            verbose=False,
-        )
-    except HTTPException:
-        raise
+        concat_method = concat_videos(paths, out_path, prefer_fast=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"拼接视频失败: {e}") from e
-    finally:
-        for c in clips:
-            try:
-                c.close()
-            except Exception:
-                pass
-        if final_clip is not None:
-            try:
-                final_clip.close()
-            except Exception:
-                pass
 
-    return {"final_video_url": out_rel}
+    return {"final_video_url": out_rel, "concat_method": concat_method}
 
 
 @app.post("/api/regenerate/scene", summary="重新规划某子剧本的所有场景")

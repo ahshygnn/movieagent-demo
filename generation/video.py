@@ -19,7 +19,19 @@ def _ark_headers() -> dict:
     }
 
 
-def submit_video(keyframe_path: str, motion_prompt: str) -> str:
+def build_video_prompt(motion_prompt: str, duration_seconds: int, resolution: str) -> str:
+    return (
+        f"{motion_prompt} --resolution {resolution} "
+        f"--duration {int(duration_seconds)} --watermark false"
+    )
+
+
+def submit_video(
+    keyframe_path: str,
+    motion_prompt: str,
+    duration_seconds: int | None = None,
+    resolution: str | None = None,
+) -> str:
     """提交 Seedance 视频生成任务，返回 task_id。"""
     with open(keyframe_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode()
@@ -27,13 +39,15 @@ def submit_video(keyframe_path: str, motion_prompt: str) -> str:
     ext = keyframe_path.rsplit(".", 1)[-1].lower() if "." in keyframe_path else "png"
     mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
             "png": "image/png", "webp": "image/webp"}.get(ext, "image/png")
+    duration = int(duration_seconds or config.VIDEO_DURATION_SECONDS)
+    video_resolution = (resolution or config.VIDEO_RESOLUTION or "720p").strip()
 
     payload = {
         "model": config.VIDEO_MODEL,
         "content": [
             {
                 "type": "text",
-                "text": f"{motion_prompt} --resolution 720p --duration 5 --watermark false",
+                "text": build_video_prompt(motion_prompt, duration, video_resolution),
             },
             {
                 "type": "image_url",
@@ -98,11 +112,19 @@ def poll_video_status(task_id: str) -> dict:
     return {"status": "failed", "reason": f"轮询超时（{max_wait} 秒）"}
 
 
-def generate_video(shot_id: str, keyframe_path: str, motion_prompt: str) -> dict:
+def generate_video(
+    shot_id: str,
+    keyframe_path: str,
+    motion_prompt: str,
+    duration_seconds: int | None = None,
+    resolution: str | None = None,
+) -> dict:
     """完整流程：提交 → 轮询 → 下载到本地。"""
     start = time.time()
+    duration = int(duration_seconds or config.VIDEO_DURATION_SECONDS)
+    video_resolution = (resolution or config.VIDEO_RESOLUTION or "720p").strip()
 
-    task_id = submit_video(keyframe_path, motion_prompt)
+    task_id = submit_video(keyframe_path, motion_prompt, duration, video_resolution)
     result = poll_video_status(task_id)
 
     if result["status"] != "succeeded":
@@ -116,4 +138,9 @@ def generate_video(shot_id: str, keyframe_path: str, motion_prompt: str) -> dict
         f.write(video_resp.content)
 
     elapsed = time.time() - start
-    return {"local_path": local_path, "elapsed_seconds": round(elapsed, 2)}
+    return {
+        "local_path": local_path,
+        "elapsed_seconds": round(elapsed, 2),
+        "duration_seconds": duration,
+        "resolution": video_resolution,
+    }
