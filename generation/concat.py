@@ -4,6 +4,17 @@ import tempfile
 from pathlib import Path
 
 
+def _moviepy_symbols(*names: str):
+    try:
+        import moviepy
+
+        return [getattr(moviepy, name) for name in names]
+    except (ImportError, AttributeError):
+        from moviepy import editor
+
+        return [getattr(editor, name) for name in names]
+
+
 def _ffmpeg_exe() -> str:
     try:
         import imageio_ffmpeg
@@ -54,7 +65,10 @@ def try_fast_concat(video_paths: list[str], output_path: str) -> bool:
 
 
 def moviepy_concat(video_paths: list[str], output_path: str) -> None:
-    from moviepy.editor import VideoFileClip, concatenate_videoclips
+    VideoFileClip, concatenate_videoclips = _moviepy_symbols(
+        "VideoFileClip",
+        "concatenate_videoclips",
+    )
 
     clips: list = []
     final_clip = None

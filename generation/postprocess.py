@@ -12,6 +12,17 @@ import config
 PAUSE_SECONDS = 0.35
 
 
+def _moviepy_symbols(*names: str):
+    try:
+        import moviepy
+
+        return [getattr(moviepy, name) for name in names]
+    except (ImportError, AttributeError):
+        from moviepy import editor
+
+        return [getattr(editor, name) for name in names]
+
+
 def collect_subtitle_lines(subtitles: dict | None) -> list[tuple[str, str]]:
     """Return non-empty dialogue lines in the order produced by the shot agent."""
     if not isinstance(subtitles, dict):
@@ -106,7 +117,7 @@ def synthesize_speech(
 
 
 def _audio_duration(path: str) -> float:
-    from moviepy.editor import AudioFileClip
+    (AudioFileClip,) = _moviepy_symbols("AudioFileClip")
 
     clip = AudioFileClip(path)
     try:
@@ -116,7 +127,7 @@ def _audio_duration(path: str) -> float:
 
 
 def _video_duration(path: str) -> float:
-    from moviepy.editor import VideoFileClip
+    (VideoFileClip,) = _moviepy_symbols("VideoFileClip")
 
     clip = VideoFileClip(path)
     try:
@@ -126,7 +137,11 @@ def _video_duration(path: str) -> float:
 
 
 def _combine_audio(audio_paths: list[str], output_path: str, pause_seconds: float) -> str:
-    from moviepy.editor import AudioClip, AudioFileClip, concatenate_audioclips
+    AudioClip, AudioFileClip, concatenate_audioclips = _moviepy_symbols(
+        "AudioClip",
+        "AudioFileClip",
+        "concatenate_audioclips",
+    )
 
     clips = []
     final_clip = None
