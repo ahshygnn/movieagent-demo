@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import Iterable
 
+import numpy as np
 import requests
 
 import config
@@ -164,7 +165,11 @@ def _combine_audio(audio_paths: list[str], output_path: str, pause_seconds: floa
             if idx < len(audio_paths) - 1 and pause_seconds > 0:
                 clips.append(
                     AudioClip(
-                        lambda t: 0 * t,
+                        lambda t: (
+                            np.zeros((len(t), 2))
+                            if hasattr(t, "__len__")
+                            else np.zeros(2)
+                        ),
                         duration=pause_seconds,
                         fps=44100,
                     )
