@@ -266,6 +266,7 @@ def api_generate_video(req: VideoRequest):
                 "dubbed": False,
                 "audio_files": {},
                 "subtitle_local_path": None,
+                "subtitle_srt_local_path": None,
                 "combined_audio_local_path": None,
             }
     except ValueError as e:
@@ -287,8 +288,14 @@ def api_generate_video(req: VideoRequest):
     )
     shot_ref["subtitle_local_path"] = post_result.get("subtitle_local_path")
     shot_ref["subtitle_url"] = (
-        f"/outputs/subtitles/{shot_id}.srt"
+        f"/outputs/subtitles/{shot_id}.vtt"
         if shot_ref.get("subtitle_local_path")
+        else None
+    )
+    shot_ref["subtitle_srt_local_path"] = post_result.get("subtitle_srt_local_path")
+    shot_ref["subtitle_srt_url"] = (
+        f"/outputs/subtitles/{shot_id}.srt"
+        if shot_ref.get("subtitle_srt_local_path")
         else None
     )
     shot_ref["combined_audio_local_path"] = post_result.get("combined_audio_local_path")
@@ -304,6 +311,7 @@ def api_generate_video(req: VideoRequest):
         "video_url": shot_ref["video_url"],
         "raw_video_url": shot_ref["raw_video_url"],
         "subtitle_url": shot_ref["subtitle_url"],
+        "subtitle_srt_url": shot_ref["subtitle_srt_url"],
         "audio_files": shot_ref["audio_files"],
         "has_dubbing": shot_ref["video_has_dubbing"],
         "generation_mode": shot_ref["generation_mode"],

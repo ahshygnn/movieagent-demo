@@ -7,7 +7,9 @@ from generation.postprocess import (
     build_srt_entries,
     collect_subtitle_lines,
     srt_timestamp,
+    vtt_timestamp,
     write_srt,
+    write_vtt,
 )
 
 
@@ -32,6 +34,9 @@ class SubtitleTimelineTests(unittest.TestCase):
         self.assertEqual(srt_timestamp(65.432), "00:01:05,432")
         self.assertEqual(srt_timestamp(3661.009), "01:01:01,009")
 
+    def test_vtt_timestamp_uses_dot_separator(self):
+        self.assertEqual(vtt_timestamp(65.432), "00:01:05.432")
+
     def test_build_srt_entries_adds_pauses_between_dialogue(self):
         entries = build_srt_entries(
             [
@@ -53,6 +58,17 @@ class SubtitleTimelineTests(unittest.TestCase):
 
         self.assertIn("00:00:00,000 --> 00:00:01,500", content)
         self.assertIn("李明: 你好，世界！<测试>", content)
+
+    def test_write_vtt_preserves_chinese_and_uses_webvtt_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "shot.vtt"
+            write_vtt([(0, 1.5, "李明: 你好，世界！")], str(path))
+
+            content = path.read_text(encoding="utf-8")
+
+        self.assertTrue(content.startswith("WEBVTT"))
+        self.assertIn("00:00:00.000 --> 00:00:01.500", content)
+        self.assertIn("李明: 你好，世界！", content)
 
 
 class FinalVideoPathTests(unittest.TestCase):

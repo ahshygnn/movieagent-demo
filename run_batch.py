@@ -280,6 +280,7 @@ def main():
                     "dubbed": False,
                     "audio_files": {},
                     "subtitle_local_path": None,
+                    "subtitle_srt_local_path": None,
                     "combined_audio_local_path": None,
                 }
             shot_ref = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
@@ -296,8 +297,14 @@ def main():
             )
             shot_ref["subtitle_local_path"] = post_result.get("subtitle_local_path")
             shot_ref["subtitle_url"] = (
-                f"/outputs/subtitles/{shot_id}.srt"
+                f"/outputs/subtitles/{shot_id}.vtt"
                 if shot_ref.get("subtitle_local_path")
+                else None
+            )
+            shot_ref["subtitle_srt_local_path"] = post_result.get("subtitle_srt_local_path")
+            shot_ref["subtitle_srt_url"] = (
+                f"/outputs/subtitles/{shot_id}.srt"
+                if shot_ref.get("subtitle_srt_local_path")
                 else None
             )
             shot_ref["combined_audio_local_path"] = post_result.get("combined_audio_local_path")

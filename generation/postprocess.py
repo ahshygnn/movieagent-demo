@@ -43,6 +43,10 @@ def srt_timestamp(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{secs:02},{ms:03}"
 
 
+def vtt_timestamp(seconds: float) -> str:
+    return srt_timestamp(seconds).replace(",", ".")
+
+
 def build_srt_entries(
     timed_lines: Iterable[tuple[str, str, float]],
     pause_seconds: float = PAUSE_SECONDS,
@@ -66,6 +70,15 @@ def write_srt(entries: Iterable[tuple[float, float, str]], path: str) -> None:
         blocks.append(
             f"{index}\n{srt_timestamp(start)} --> {srt_timestamp(end)}\n{text}\n"
         )
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(blocks))
+
+
+def write_vtt(entries: Iterable[tuple[float, float, str]], path: str) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    blocks = ["WEBVTT\n"]
+    for start, end, text in entries:
+        blocks.append(f"{vtt_timestamp(start)} --> {vtt_timestamp(end)}\n{text}\n")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(blocks))
 
@@ -264,6 +277,49 @@ def burn_subtitles_and_audio(
     return output_path
 
 
+def mux_audio_with_video(
+    video_path: str,
+    audio_path: str,
+    output_path: str,
+) -> str:
+    video_duration = _video_duration(video_path)
+    audio_duration = _audio_duration(audio_path)
+    extend_by = max(0.0, audio_duration - video_duration)
+
+    cmd = [
+        _ffmpeg_exe(),
+        "-y",
+        "-i",
+        video_path,
+        "-i",
+        audio_path,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+    ]
+    if extend_by > 0.05:
+        cmd.extend(["-vf", f"tpad=stop_mode=clone:stop_duration={extend_by:.3f}"])
+        cmd.extend(["-c:v", "libx264"])
+    else:
+        cmd.extend(["-c:v", "copy"])
+    cmd.extend([
+        "-c:a",
+        "aac",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        output_path,
+    ])
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg audio mux failed: {result.stderr}")
+    return output_path
+
+
 def postprocess_shot_video(
     shot_id: str,
     video_path: str,
@@ -278,6 +334,7 @@ def postprocess_shot_video(
             "dubbed": False,
             "audio_files": {},
             "subtitle_local_path": None,
+            "subtitle_srt_local_path": None,
             "combined_audio_local_path": None,
         }
 
@@ -302,19 +359,23 @@ def postprocess_shot_video(
         ordered_audio_paths.append(audio_path)
         timed_lines.append((speaker, text, duration))
 
-    subtitle_path = os.path.join("outputs/subtitles", f"{shot_id}.srt")
-    write_srt(build_srt_entries(timed_lines, pause_seconds), subtitle_path)
+    subtitle_entries = build_srt_entries(timed_lines, pause_seconds)
+    subtitle_srt_path = os.path.join("outputs/subtitles", f"{shot_id}.srt")
+    subtitle_vtt_path = os.path.join("outputs/subtitles", f"{shot_id}.vtt")
+    write_srt(subtitle_entries, subtitle_srt_path)
+    write_vtt(subtitle_entries, subtitle_vtt_path)
 
     combined_audio_path = os.path.join("outputs/audio", f"{shot_id}_dialogue.mp3")
     _combine_audio(ordered_audio_paths, combined_audio_path, pause_seconds)
 
     output_path = os.path.join(config.VIDEO_DIR, f"{shot_id}_dubbed.mp4")
-    burn_subtitles_and_audio(video_path, combined_audio_path, subtitle_path, output_path)
+    mux_audio_with_video(video_path, combined_audio_path, output_path)
 
     return {
         "local_path": output_path,
         "dubbed": True,
         "audio_files": audio_files,
-        "subtitle_local_path": subtitle_path,
+        "subtitle_local_path": subtitle_vtt_path,
+        "subtitle_srt_local_path": subtitle_srt_path,
         "combined_audio_local_path": combined_audio_path,
     }
