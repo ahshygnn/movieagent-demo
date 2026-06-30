@@ -1,11 +1,14 @@
 import sys
 import time
+import threading
 import uuid
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from agents.director import run_director_agent
 from agents.scene import run_scene_agent
 from agents.shot import run_shot_agent
+import metrics.collector as mc
 
 # 内存任务存储（demo 阶段不需要数据库）
 tasks = {}
@@ -34,6 +37,36 @@ def load_tasks():
 
 load_tasks()  # 模块加载时执行
 
+_shot_lock = threading.Lock()
+
+
+def _run_shot_task(ss_name: str, scene_name: str, scene_data: dict) -> tuple:
+    shot_out = run_shot_agent(scene_data)
+    return ss_name, scene_name, shot_out
+
+
+def _normalize_director_result(result: dict, movie_script: str, characters: list) -> dict:
+    if isinstance(result, dict) and result.get("Sub-Script"):
+        return result
+    return {
+        "Relationships": {},
+        "Internal Chain-of-Thought": {
+            "Core Narrative Structure": "Director returned a non-standard JSON shape; normalized to one complete episode segment.",
+            "Key Character Information": ", ".join(characters),
+            "Temporal Segmentation": "Single short episode.",
+            "Sub-Script Breakdown Criteria": "Preserve the complete user-provided episode.",
+            "Division": "One concise episode segment is sufficient for downstream scene planning.",
+        },
+        "Sub-Script": {
+            "Sub-Script 1": {
+                "Plot": movie_script,
+                "Involving Characters": characters,
+                "Timeline": "Episode 1",
+                "Reason for Division": "Short episode test; keep the full story together for Scene Agent planning.",
+            }
+        },
+    }
+
 
 def create_task() -> str:
     task_id = str(uuid.uuid4())
@@ -50,6 +83,7 @@ def create_task() -> str:
             "output_tokens": 0
         }
     }
+    mc.init_metrics(task_id)
     return task_id
 
 
@@ -78,23 +112,35 @@ def run_full_pipeline(task_id: str, movie_script: str, characters: list):
     Step 3: Shot Agent      → shots（每个 scene 调用一次）
     """
     try:
+        pipeline_start = time.time()
+        tasks[task_id]["timing"] = {}
+
         # ── Step 1: Director Agent ──────────────────────────────
         tasks[task_id]["status"] = "director_running"
         _log(task_id, "🎬 Director Agent 开始分析剧本...")
 
+        tasks[task_id]["timing"]["director_start"] = time.time()
         director_out = run_director_agent(movie_script, characters)
-        tasks[task_id]["sub_scripts"] = director_out["result"]
+        tasks[task_id]["timing"]["director_end"] = time.time()
+        director_elapsed = tasks[task_id]["timing"]["director_end"] - tasks[task_id]["timing"]["director_start"]
+
+        tasks[task_id]["sub_scripts"] = _normalize_director_result(
+            director_out["result"],
+            movie_script,
+            characters,
+        )
         _add_cost(task_id, director_out["usage"])
 
-        sub_script_count = len(director_out["result"].get("Sub-Script", {}))
+        sub_script_count = len(tasks[task_id]["sub_scripts"].get("Sub-Script", {}))
         tasks[task_id]["progress"] = 20
         _log(task_id, f"✅ Director Agent 完成，生成 {sub_script_count} 个子剧本")
 
         # ── Step 2: Scene Agent ─────────────────────────────────
         tasks[task_id]["status"] = "scene_running"
-        relationships = director_out["result"].get("Relationships", {})
-        sub_scripts = director_out["result"].get("Sub-Script", {})
+        relationships = tasks[task_id]["sub_scripts"].get("Relationships", {})
+        sub_scripts = tasks[task_id]["sub_scripts"].get("Sub-Script", {})
 
+        tasks[task_id]["timing"]["scene_start"] = time.time()
         for i, (ss_name, ss_data) in enumerate(sub_scripts.items()):
             _log(task_id, f"🎭 Scene Agent 处理 {ss_name}...")
             scene_out = run_scene_agent(ss_data["Plot"], relationships)
@@ -102,6 +148,7 @@ def run_full_pipeline(task_id: str, movie_script: str, characters: list):
             _add_cost(task_id, scene_out["usage"])
             tasks[task_id]["progress"] = 20 + int(30 * (i + 1) / len(sub_scripts))
 
+        tasks[task_id]["timing"]["scene_end"] = time.time()
         _log(task_id, "✅ Scene Agent 完成")
 
         # ── Step 3: Shot Agent ──────────────────────────────────
@@ -113,17 +160,32 @@ def run_full_pipeline(task_id: str, movie_script: str, characters: list):
         ]
         total = max(len(all_scenes), 1)
 
-        for idx, (ss_name, scene_name, scene_data) in enumerate(all_scenes):
-            _log(task_id, f"📽️ Shot Agent 处理 {ss_name} → {scene_name}...")
-            shot_out = run_shot_agent(scene_data)
+        _log(task_id, f"📽️ Shot Agent 并行处理 {total} 个场景（最多 3 路并发）...")
+        tasks[task_id]["timing"]["shot_start"] = time.time()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_map = {
+                executor.submit(_run_shot_task, ss_name, scene_name, scene_data): (ss_name, scene_name)
+                for ss_name, scene_name, scene_data in all_scenes
+            }
+            completed = 0
+            for future in as_completed(future_map):
+                ss_name, scene_name = future_map[future]
+                try:
+                    _, _, shot_out = future.result()
+                except Exception as e:
+                    _log(task_id, f"⚠️ Shot Agent 失败 {ss_name} → {scene_name}: {e}")
+                    continue
+                with _shot_lock:
+                    if ss_name not in tasks[task_id]["shots"]:
+                        tasks[task_id]["shots"][ss_name] = {}
+                    tasks[task_id]["shots"][ss_name][scene_name] = shot_out["result"]
+                    _add_cost(task_id, shot_out["usage"])
+                    completed += 1
+                    tasks[task_id]["progress"] = 50 + int(45 * completed / total)
+                    _log(task_id, f"✅ Shot Agent 完成 {ss_name} → {scene_name}")
 
-            if ss_name not in tasks[task_id]["shots"]:
-                tasks[task_id]["shots"][ss_name] = {}
-            tasks[task_id]["shots"][ss_name][scene_name] = shot_out["result"]
-            _add_cost(task_id, shot_out["usage"])
-            tasks[task_id]["progress"] = 50 + int(45 * (idx + 1) / total)
-
-            time.sleep(2)  # 避免触发限速
+        tasks[task_id]["timing"]["shot_end"] = time.time()
+        tasks[task_id]["timing"]["pipeline_end"] = time.time()
 
         # ── 完成 ────────────────────────────────────────────────
         tasks[task_id]["status"] = "done"

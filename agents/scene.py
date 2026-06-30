@@ -79,10 +79,16 @@ Please ensure the output is in JSON format"""
 from agents.base_agent import BaseAgent
 
 
+def _postprocess_scene_result(result: dict) -> dict:
+    result.pop("Internal Chain-of-Thought", None)
+    return result
+
+
 def run_scene_agent(sub_script_plot: str, relationships: dict) -> dict:
     agent = BaseAgent(system_prompt=SCENE_PROMPT, temp=0.7)
     query = f"""Given the following inputs:
 - Script Synopsis: "{sub_script_plot}"
 - Character Relationships: {relationships}"""
     result = agent(query, parse=True)
+    result = _postprocess_scene_result(result)
     return {"result": result, "usage": agent.get_usage()}
