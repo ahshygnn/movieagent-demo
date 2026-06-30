@@ -18,7 +18,6 @@ from generation.image import generate_keyframe
 from generation.concat import concat_videos
 from generation.postprocess import prepare_dubbing_assets
 from generation.shot_pipeline import build_shot_id, generate_shot_video_artifacts, shot_video_complete
-from generation.subtitles import burn_subtitles, merge_sidecar_subtitles
 
 app = FastAPI(title="MovieAgent Demo API", version="1.0.0")
 
@@ -34,7 +33,6 @@ app.add_middleware(
 os.makedirs("outputs/keyframes", exist_ok=True)
 os.makedirs("outputs/videos", exist_ok=True)
 os.makedirs("outputs/audio", exist_ok=True)
-os.makedirs("outputs/subtitles", exist_ok=True)
 os.makedirs("outputs/characters", exist_ok=True)
 os.makedirs("outputs/metrics", exist_ok=True)
 app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
@@ -353,8 +351,6 @@ def api_generate_video(req: VideoRequest):
     return {
         "video_url": shot_ref["video_url"],
         "raw_video_url": shot_ref["raw_video_url"],
-        "subtitle_url": shot_ref["subtitle_url"],
-        "subtitle_srt_url": shot_ref["subtitle_srt_url"],
         "audio_files": shot_ref["audio_files"],
         "has_dubbing": shot_ref["video_has_dubbing"],
         "generation_mode": shot_ref["generation_mode"],
@@ -509,11 +505,7 @@ def _collect_media_for_final(task: dict, sub_script_names: list[str]) -> list[di
                 for key in ("enhanced_video_local_path", "video_local_path", "raw_video_local_path"):
                     vp = (shot_data or {}).get(key)
                     if vp and isinstance(vp, str) and os.path.isfile(vp):
-                        items.append({
-                            "video_path": vp,
-                            "subtitle_srt_path": (shot_data or {}).get("subtitle_srt_local_path"),
-                            "subtitle_vtt_path": (shot_data or {}).get("subtitle_local_path"),
-                        })
+                        items.append({"video_path": vp})
                         break
     return items
 
@@ -545,28 +537,8 @@ def api_generate_final_video(req: FinalVideoRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"拼接视频失败: {e}") from e
 
-    subtitle_srt_path = os.path.join("outputs/subtitles", f"{req.task_id}_final.srt")
-    subtitle_vtt_path = os.path.join("outputs/subtitles", f"{req.task_id}_final.vtt")
-    subtitle_result = merge_sidecar_subtitles(
-        paths,
-        [item.get("subtitle_srt_path") for item in media_items],
-        subtitle_srt_path,
-        subtitle_vtt_path,
-    )
-    subtitled_path = os.path.join("outputs/videos", f"{req.task_id}_final_subtitled.mp4")
-    subtitled_rel = f"/outputs/videos/{req.task_id}_final_subtitled.mp4"
-    if subtitle_result["entries"] > 0:
-        burn_subtitles(out_path, subtitle_srt_path, subtitled_path)
-    else:
-        subtitled_path = out_path
-        subtitled_rel = out_rel
-
     return {
         "final_video_url": out_rel,
-        "final_subtitled_video_url": subtitled_rel,
-        "final_subtitle_url": f"/outputs/subtitles/{req.task_id}_final.vtt",
-        "final_subtitle_srt_url": f"/outputs/subtitles/{req.task_id}_final.srt",
-        "subtitle_entries": subtitle_result["entries"],
         "concat_method": concat_method,
     }
 
@@ -677,8 +649,8 @@ def api_generate_audio(req: AudioRequest):
     if not shot_data:
         return {"error": "shot not found"}
 
-    subtitles = shot_data.get("Subtitles") or {}
-    if not subtitles:
+    dialogue = shot_data.get("Dialogue") or {}
+    if not dialogue:
         return {"message": "该Shot没有台词", "audio_files": {}}
 
     merged_voice = dict(task.get("voice_refs") or {})
@@ -694,15 +666,11 @@ def api_generate_audio(req: AudioRequest):
 
     shot_ref = tasks[req.task_id]["shots"][req.sub_script_name][req.scene_name]["Shot"][req.shot_name]
     shot_ref["audio_files"] = assets.get("audio_files") or {}
-    shot_ref["subtitle_local_path"] = assets.get("subtitle_local_path")
-    shot_ref["subtitle_srt_local_path"] = assets.get("subtitle_srt_local_path")
     shot_ref["combined_audio_local_path"] = assets.get("combined_audio_local_path")
     save_tasks()
 
     return {
         "audio_files": shot_ref["audio_files"],
-        "subtitle_local_path": shot_ref["subtitle_local_path"],
-        "subtitle_srt_local_path": shot_ref["subtitle_srt_local_path"],
         "combined_audio_local_path": shot_ref["combined_audio_local_path"],
     }
 

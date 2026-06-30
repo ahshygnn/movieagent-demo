@@ -31,10 +31,10 @@ Before generating the final output, perform structured reasoning to ensure logic
    - Specify **camera movements** (e.g., static shot for tension, dolly-in for intimacy).
    - Adjust angles dynamically to maintain narrative engagement.
 
-6. **Ensure Dialogue & Subtitle Accuracy**
+6. **Ensure Dialogue Accuracy**
    - Extract **relevant dialogue** for each shot, ensuring proper pacing.
    - Format dialogue in JSON structure with character names.
-   - All dialogue in `Subtitles` must be written in Simplified Chinese.
+   - All dialogue in `Dialogue` must be written in Simplified Chinese.
    - If the source story or scene is in English, translate or localize the dialogue into natural Simplified Chinese.
 
 After completing this internal reasoning, proceed to the final structured output.]
@@ -47,7 +47,7 @@ Based on your internal reasoning, generate a structured shot list. Ensure that:
 - Character positioning follows bounding box constraints [x, y, x1, y1] (normalized, interpolation must not exceed 0.5).
 - Bounding boxes must not intersect or overlap.
 - Dialogue is formatted properly in JSON.
-- Dialogue in `Subtitles` must be Simplified Chinese, even when the input script is English.
+- Dialogue in `Dialogue` must be Simplified Chinese, even when the input script is English.
 - The character names mentioned in the description must match the provided names exactly.
 - Each shot should include no more than three characters, preferably one or two. This ensures alignment with the image generation model's maximum of three character reference images.
 - Involving Characters must include only the names of existing characters and no modifiers.
@@ -61,7 +61,7 @@ Output your final result in the following JSON format:
         "Character Positioning & Bounding Boxes": "...",
         "Emotional Impact": "...",
         "Camera Techniques and Movements": "...",
-        "Dialogue & Subtitle Accuracy": "..."
+        "Dialogue Accuracy": "..."
     },
     "Shot": {
         "Shot 1": {
@@ -74,7 +74,7 @@ Output your final result in the following JSON format:
             "Emotional Enhancement": "...",
             "Shot Type": "Type of shot",
             "Camera Movement": "Description of camera movement",
-            "Subtitles": {
+            "Dialogue": {
                 "Character 1": "Dialogue content"
             }
         },
@@ -87,7 +87,7 @@ Output your final result in the following JSON format:
             "Emotional Enhancement": "...",
             "Shot Type": "...",
             "Camera Movement": "...",
-            "Subtitles": {
+            "Dialogue": {
                 "Character 1": "..."
             }
         }

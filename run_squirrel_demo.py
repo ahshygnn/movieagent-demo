@@ -1,4 +1,4 @@
-"""Direct 6-shot squirrel demo with keyframes, video, YiZhan TTS, sidecar subtitles, and final concat."""
+"""Direct 6-shot squirrel demo with keyframes, video, YiZhan TTS dubbing, and final concat."""
 from __future__ import annotations
 
 import time
@@ -14,7 +14,6 @@ from generation.shot_pipeline import (
     generate_shot_video_artifacts,
     shot_video_complete,
 )
-from generation.subtitles import burn_subtitles, merge_sidecar_subtitles
 from pipeline import create_task, save_tasks, tasks
 
 
@@ -97,7 +96,7 @@ def build_task(task_id: str) -> None:
             "Plot/Visual Description": item["plot"],
             "Coarse Plot": item["coarse"],
             "Camera Movement": item["motion"],
-            "Subtitles": {"Qiqi": item["line"]},
+            "Dialogue": {"Qiqi": item["line"]},
         }
     save_tasks()
 
@@ -187,28 +186,9 @@ def main() -> None:
 
     out_path = f"outputs/videos/{task_id}_squirrel_final.mp4"
     concat_method = concat_videos(ordered_paths, out_path, prefer_fast=True)
-    subtitle_srt_path = f"outputs/subtitles/{task_id}_squirrel_final.srt"
-    subtitle_vtt_path = f"outputs/subtitles/{task_id}_squirrel_final.vtt"
-    subtitle_paths = [
-        tasks[task_id]["shots"]["storybook"][item["scene"]]["Shot"][item["shot"]].get("subtitle_srt_local_path")
-        for item in SHOTS
-    ]
-    subtitle_result = merge_sidecar_subtitles(
-        ordered_paths,
-        subtitle_paths,
-        subtitle_srt_path,
-        subtitle_vtt_path,
-    )
-    subtitled_out_path = f"outputs/videos/{task_id}_squirrel_final_subtitled.mp4"
-    if subtitle_result["entries"] > 0:
-        burn_subtitles(out_path, subtitle_srt_path, subtitled_out_path)
-    else:
-        subtitled_out_path = out_path
     total = time.time() - start
     print(f"Concat: {concat_method}")
     print(f"Final: {out_path}")
-    print(f"Final subtitled: {subtitled_out_path}")
-    print(f"Final subtitles: {subtitle_vtt_path} ({subtitle_result['entries']} entries)")
     print(f"Elapsed: {total:.2f}s ({total / 60:.2f} min)")
     print(f"Task ID: {task_id}")
 

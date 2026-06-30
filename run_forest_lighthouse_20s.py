@@ -1,8 +1,7 @@
 """20-second real full-chain test for the Forest Post Office story.
 
 Flow:
-LLM planning -> first 4 keyframes -> video + Chinese TTS -> sidecar subtitles
--> final concat -> hard-subtitled MP4.
+LLM planning -> first 4 keyframes -> video + Chinese TTS dubbing -> final concat.
 
 Resume with:
     python run_forest_lighthouse_20s.py <task_id>
@@ -28,9 +27,8 @@ os.environ.setdefault("YIZHAN_TTS_DEFAULT_VOICE", "Cherry")
 import config
 from generation.concat import concat_videos
 from generation.image import generate_keyframe
-from generation.postprocess import collect_subtitle_lines
+from generation.postprocess import collect_dialogue_lines
 from generation.shot_pipeline import build_shot_id, generate_shot_video_artifacts, shot_video_complete
-from generation.subtitles import burn_subtitles, merge_sidecar_subtitles
 from pipeline import create_task, run_full_pipeline, save_tasks, tasks
 
 
@@ -144,11 +142,11 @@ def _has_cjk(text: str) -> bool:
     return bool(re.search(r"[\u4e00-\u9fff]", text or ""))
 
 
-def ensure_narration_subtitles(shots: list[dict]) -> int:
+def ensure_narration_dialogue(shots: list[dict]) -> int:
     added = 0
     for index, item in enumerate(shots):
         shot_data = item["shot_data"]
-        existing_lines = collect_subtitle_lines(shot_data.get("Subtitles"))
+        existing_lines = collect_dialogue_lines(shot_data.get("Dialogue"))
         if existing_lines and any(_has_cjk(text) for _speaker, text in existing_lines):
             continue
         fallback = (
@@ -157,8 +155,7 @@ def ensure_narration_subtitles(shots: list[dict]) -> int:
             else str(shot_data.get("Coarse Plot") or shot_data.get("Plot/Visual Description") or "").strip()
         )
         if fallback:
-            shot_data["Subtitles"] = {"旁白": fallback}
-            shot_data["subtitle_source"] = "forest_lighthouse_20s_fallback"
+            shot_data["Dialogue"] = {"旁白": fallback}
             shot_data["video_has_dubbing"] = False
             added += 1
     return added
@@ -175,12 +172,12 @@ def refs_for_shot(task_id: str, involving) -> dict[str, str]:
     return {name: refs[name] for name in names if name in refs}
 
 
-def subtitle_char_count(shots: list[dict]) -> int:
+def dialogue_char_count(shots: list[dict]) -> int:
     total = 0
     for item in shots:
-        subtitles = item["shot_data"].get("Subtitles") or {}
-        if isinstance(subtitles, dict):
-            total += sum(len(str(text or "")) for text in subtitles.values())
+        dialogue = item["shot_data"].get("Dialogue") or {}
+        if isinstance(dialogue, dict):
+            total += sum(len(str(text or "")) for text in dialogue.values())
     return total
 
 
@@ -207,7 +204,7 @@ def generate_keyframes(task_id: str, shots: list[dict]) -> int:
     return generated
 
 
-def generate_videos(task_id: str, shots: list[dict]) -> tuple[list[str], list[str | None], int]:
+def generate_videos(task_id: str, shots: list[dict]) -> tuple[list[str], int]:
     jobs = []
     for index, item in enumerate(shots, start=1):
         shot_data = item["shot_data"]
@@ -257,42 +254,25 @@ def generate_videos(task_id: str, shots: list[dict]) -> tuple[list[str], list[st
                 log(f"[{index}/{len(shots)}] video+dubbing done {elapsed:.1f}s cache={cache_hit}: {label}")
 
     video_paths: list[str] = []
-    subtitle_paths: list[str | None] = []
     completed = 0
     for item in shots:
         shot_data = item["shot_data"]
         video_path = shot_data.get("video_local_path")
         if video_path and Path(video_path).is_file():
             video_paths.append(video_path)
-            subtitle_paths.append(shot_data.get("subtitle_srt_local_path"))
             completed += 1
-    return video_paths, subtitle_paths, completed
+    return video_paths, completed
 
 
-def concat_outputs(task_id: str, video_paths: list[str], subtitle_paths: list[str | None]) -> dict:
+def concat_outputs(task_id: str, video_paths: list[str]) -> dict:
     if not video_paths:
         raise RuntimeError("No generated videos to concatenate.")
 
-    output_base = f"outputs/videos/{task_id}_forest_lighthouse_20s"
-    final_video = f"{output_base}_final.mp4"
-    final_subtitled = f"{output_base}_final_subtitled.mp4"
-    final_srt = f"outputs/subtitles/{task_id}_forest_lighthouse_20s_final.srt"
-    final_vtt = f"outputs/subtitles/{task_id}_forest_lighthouse_20s_final.vtt"
-
+    final_video = f"outputs/videos/{task_id}_forest_lighthouse_20s_final.mp4"
     concat_method = concat_videos(video_paths, final_video, prefer_fast=True)
-    subtitle_result = merge_sidecar_subtitles(video_paths, subtitle_paths, final_srt, final_vtt)
-    if subtitle_result["entries"] > 0:
-        burn_subtitles(final_video, final_srt, final_subtitled)
-    else:
-        final_subtitled = final_video
-
     return {
         "concat_method": concat_method,
         "final_video": final_video,
-        "final_subtitled_video": final_subtitled,
-        "final_srt": final_srt,
-        "final_vtt": final_vtt,
-        "subtitle_entries": subtitle_result["entries"],
     }
 
 
@@ -345,21 +325,21 @@ def main() -> None:
         log(f"Planning produced only {len(selected_shots)} shots; generating all available shots.")
     log(f"Planned shots: {len(planned_shots)}; generating first {len(selected_shots)} shots.")
 
-    added_subtitles = ensure_narration_subtitles(selected_shots)
-    if added_subtitles:
-        log(f"Added Chinese narration subtitles for {added_subtitles} shots.")
+    added_narration = ensure_narration_dialogue(selected_shots)
+    if added_narration:
+        log(f"Added Chinese narration dialogue for {added_narration} shots.")
         save_tasks()
 
     image_count = generate_keyframes(task_id, selected_shots)
-    video_paths, subtitle_paths, completed_videos = generate_videos(task_id, selected_shots)
+    video_paths, completed_videos = generate_videos(task_id, selected_shots)
     if completed_videos != len(selected_shots):
         raise RuntimeError(
             f"Only {completed_videos}/{len(selected_shots)} selected shots have generated videos. "
             f"Resume with: python run_forest_lighthouse_20s.py {task_id}"
         )
 
-    outputs = concat_outputs(task_id, video_paths, subtitle_paths)
-    video_info = inspect_video(outputs["final_subtitled_video"])
+    outputs = concat_outputs(task_id, video_paths)
+    video_info = inspect_video(outputs["final_video"])
     total_elapsed = time.time() - started
 
     task = tasks[task_id]
@@ -369,7 +349,7 @@ def main() -> None:
         "generated_shot_count": len(selected_shots),
         "generated_keyframes_this_run": image_count,
         "video_seconds_requested": len(selected_shots) * int(config.VIDEO_DURATION_SECONDS),
-        "tts_characters": subtitle_char_count(selected_shots),
+        "tts_characters": dialogue_char_count(selected_shots),
         "elapsed_seconds": round(total_elapsed, 2),
         "final_video_info": video_info,
     }
@@ -381,12 +361,9 @@ def main() -> None:
     log(f"Generated shot count: {len(selected_shots)}")
     log(f"Images generated this run: {image_count}")
     log(f"Requested video seconds: {len(selected_shots) * int(config.VIDEO_DURATION_SECONDS)}")
-    log(f"TTS characters: {subtitle_char_count(selected_shots)}")
+    log(f"TTS characters: {dialogue_char_count(selected_shots)}")
     log(f"Elapsed: {total_elapsed:.2f}s ({total_elapsed / 60:.2f} min)")
     log(f"Final video: {outputs['final_video']}")
-    log(f"Final subtitled video: {outputs['final_subtitled_video']}")
-    log(f"Final VTT: {outputs['final_vtt']}")
-    log(f"Final SRT: {outputs['final_srt']}")
     log(f"Video info: {video_info}")
 
 

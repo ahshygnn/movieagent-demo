@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import config
 from generation.video import generate_video
 from generation.postprocess import (
-    collect_subtitle_lines,
+    collect_dialogue_lines,
     mux_prepared_dubbing_assets,
     prepare_dubbing_assets,
 )
@@ -26,8 +26,6 @@ def empty_postprocess_result(raw_video_path: str) -> dict:
         "local_path": raw_video_path,
         "dubbed": False,
         "audio_files": {},
-        "subtitle_local_path": None,
-        "subtitle_srt_local_path": None,
         "combined_audio_local_path": None,
     }
 
@@ -45,13 +43,11 @@ def shot_video_complete(shot_data: dict) -> bool:
     video_path = (shot_data or {}).get("video_local_path")
     if not _valid_file(video_path, min_bytes=4096):
         return False
-    if not config.ENABLE_DUBBING or not collect_subtitle_lines((shot_data or {}).get("Subtitles")):
+    if not config.ENABLE_DUBBING or not collect_dialogue_lines((shot_data or {}).get("Dialogue")):
         return True
     return (
         bool((shot_data or {}).get("video_has_dubbing"))
         and _valid_file((shot_data or {}).get("combined_audio_local_path"))
-        and _valid_file((shot_data or {}).get("subtitle_local_path"), min_bytes=32)
-        and _valid_file((shot_data or {}).get("subtitle_srt_local_path"), min_bytes=32)
     )
 
 
@@ -63,10 +59,6 @@ def video_update_fields(shot_id: str, raw_video_path: str, post_result: dict, vi
         "enhanced_video_local_path": post_result["local_path"] if dubbed else None,
         "video_local_path": post_result["local_path"],
         "video_url": f"/outputs/videos/{shot_id}_dubbed.mp4" if dubbed else f"/outputs/videos/{shot_id}.mp4",
-        "subtitle_local_path": post_result.get("subtitle_local_path"),
-        "subtitle_url": f"/outputs/subtitles/{shot_id}.vtt" if post_result.get("subtitle_local_path") else None,
-        "subtitle_srt_local_path": post_result.get("subtitle_srt_local_path"),
-        "subtitle_srt_url": f"/outputs/subtitles/{shot_id}.srt" if post_result.get("subtitle_srt_local_path") else None,
         "combined_audio_local_path": post_result.get("combined_audio_local_path"),
         "audio_files": post_result.get("audio_files") or {},
         "video_has_dubbing": dubbed,

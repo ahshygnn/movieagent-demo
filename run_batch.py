@@ -44,7 +44,6 @@ from pipeline import tasks, create_task, run_full_pipeline
 from generation.image import generate_keyframe
 from generation.shot_pipeline import build_shot_id, generate_shot_video_artifacts, shot_video_complete
 from generation.concat import concat_videos
-from generation.subtitles import merge_sidecar_subtitles
 
 VIDEO_SLEEP = 3
 
@@ -311,14 +310,12 @@ def main():
     log("=" * 60)
 
     video_paths = []
-    subtitle_paths = []
     for item in all_shots:
         ss, sc, sh = item["sub_script_name"], item["scene_name"], item["shot_name"]
         shot_ref = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
         vp = shot_ref.get("video_local_path")
         if vp and Path(vp).exists():
             video_paths.append(vp)
-            subtitle_paths.append(shot_ref.get("subtitle_srt_local_path"))
 
     if not video_paths:
         log("❌ 没有可拼接的视频片段")
@@ -329,14 +326,7 @@ def main():
     out_path = f"outputs/videos/{task_id}_final.mp4"
     try:
         concat_method = concat_videos(video_paths, out_path, prefer_fast=True)
-        subtitle_result = merge_sidecar_subtitles(
-            video_paths,
-            subtitle_paths,
-            f"outputs/subtitles/{task_id}_final.srt",
-            f"outputs/subtitles/{task_id}_final.vtt",
-        )
         log(f"\n🎉 成片已保存：{out_path}（拼接方式：{concat_method}）")
-        log(f"外挂字幕已保存：outputs/subtitles/{task_id}_final.vtt（{subtitle_result['entries']} 条）")
     except Exception as e:
         log(f"❌ 拼接失败: {e}")
 

@@ -87,7 +87,7 @@ def build_task(task_id: str):
             "Plot/Visual Description": item["plot"],
             "Coarse Plot": item["coarse"],
             "Camera Movement": item["motion"],
-            "Subtitles": {},
+            "Dialogue": {},
         }
     save_tasks()
 

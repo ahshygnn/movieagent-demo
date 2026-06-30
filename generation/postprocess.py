@@ -3,7 +3,6 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
@@ -25,64 +24,15 @@ def _moviepy_symbols(*names: str):
         return [getattr(editor, name) for name in names]
 
 
-def collect_subtitle_lines(subtitles: dict | None) -> list[tuple[str, str]]:
-    """Return non-empty dialogue lines in the order produced by the shot agent."""
-    if not isinstance(subtitles, dict):
+def collect_dialogue_lines(dialogue: dict | None) -> list[tuple[str, str]]:
+    if not isinstance(dialogue, dict):
         return []
     lines: list[tuple[str, str]] = []
-    for speaker, text in subtitles.items():
+    for speaker, text in dialogue.items():
         clean_text = str(text or "").strip()
         if clean_text:
             lines.append((str(speaker), clean_text))
     return lines
-
-
-def srt_timestamp(seconds: float) -> str:
-    millis = max(0, int(round(seconds * 1000)))
-    hours, rem = divmod(millis, 3_600_000)
-    minutes, rem = divmod(rem, 60_000)
-    secs, ms = divmod(rem, 1000)
-    return f"{hours:02}:{minutes:02}:{secs:02},{ms:03}"
-
-
-def vtt_timestamp(seconds: float) -> str:
-    return srt_timestamp(seconds).replace(",", ".")
-
-
-def build_srt_entries(
-    timed_lines: Iterable[tuple[str, str, float]],
-    pause_seconds: float = PAUSE_SECONDS,
-) -> list[tuple[float, float, str]]:
-    entries: list[tuple[float, float, str]] = []
-    cursor = 0.0
-    for speaker, text, duration in timed_lines:
-        safe_duration = max(float(duration), 0.1)
-        start = cursor
-        end = start + safe_duration
-        label = f"{speaker}: {text}" if speaker else text
-        entries.append((start, end, label))
-        cursor = end + pause_seconds
-    return entries
-
-
-def write_srt(entries: Iterable[tuple[float, float, str]], path: str) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    blocks = []
-    for index, (start, end, text) in enumerate(entries, start=1):
-        blocks.append(
-            f"{index}\n{srt_timestamp(start)} --> {srt_timestamp(end)}\n{text}\n"
-        )
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(blocks))
-
-
-def write_vtt(entries: Iterable[tuple[float, float, str]], path: str) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    blocks = ["WEBVTT\n"]
-    for start, end, text in entries:
-        blocks.append(f"{vtt_timestamp(start)} --> {vtt_timestamp(end)}\n{text}\n")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(blocks))
 
 
 def _safe_name(value: str) -> str:
@@ -296,8 +246,6 @@ def empty_dubbing_result(video_path: str) -> dict:
         "local_path": video_path,
         "dubbed": False,
         "audio_files": {},
-        "subtitle_local_path": None,
-        "subtitle_srt_local_path": None,
         "combined_audio_local_path": None,
         "cache_hit": False,
     }
@@ -309,22 +257,18 @@ def prepare_dubbing_assets(
     voice_refs: dict | None = None,
     pause_seconds: float = PAUSE_SECONDS,
 ) -> dict:
-    lines = collect_subtitle_lines(shot_data.get("Subtitles"))
+    lines = collect_dialogue_lines(shot_data.get("Dialogue"))
     if not lines:
         return {
             "dubbed": False,
             "audio_files": {},
-            "subtitle_local_path": None,
-            "subtitle_srt_local_path": None,
             "combined_audio_local_path": None,
             "cache_hit": False,
         }
 
     os.makedirs("outputs/audio", exist_ok=True)
-    os.makedirs("outputs/subtitles", exist_ok=True)
 
     audio_files: dict[str, str] = {}
-    timed_lines: list[tuple[str, str, float]] = []
     ordered_audio_paths: list[str] = []
     cache_hit = True
 
@@ -338,27 +282,18 @@ def prepare_dubbing_assets(
         )
         if _tts_cache_valid(audio_path, text, voice, model):
             try:
-                duration = _audio_duration(audio_path)
+                _audio_duration(audio_path)
             except Exception:
                 Path(audio_path).unlink(missing_ok=True)
                 synthesize_speech(text, voice, audio_path, model=model)
                 _write_json(_audio_meta_path(audio_path), {"text": text, "voice": voice, "model": model})
-                duration = _audio_duration(audio_path)
                 cache_hit = False
         else:
             synthesize_speech(text, voice, audio_path, model=model)
             _write_json(_audio_meta_path(audio_path), {"text": text, "voice": voice, "model": model})
-            duration = _audio_duration(audio_path)
             cache_hit = False
         audio_files[f"{speaker}_{index}"] = audio_path
         ordered_audio_paths.append(audio_path)
-        timed_lines.append((speaker, text, duration))
-
-    subtitle_entries = build_srt_entries(timed_lines, pause_seconds)
-    subtitle_srt_path = os.path.join("outputs/subtitles", f"{shot_id}.srt")
-    subtitle_vtt_path = os.path.join("outputs/subtitles", f"{shot_id}.vtt")
-    write_srt(subtitle_entries, subtitle_srt_path)
-    write_vtt(subtitle_entries, subtitle_vtt_path)
 
     combined_audio_path = os.path.join("outputs/audio", f"{shot_id}_dialogue.mp3")
     if cache_hit and _valid_media_file(combined_audio_path):
@@ -375,8 +310,6 @@ def prepare_dubbing_assets(
     return {
         "dubbed": True,
         "audio_files": audio_files,
-        "subtitle_local_path": subtitle_vtt_path,
-        "subtitle_srt_local_path": subtitle_srt_path,
         "combined_audio_local_path": combined_audio_path,
         "cache_hit": cache_hit,
     }
@@ -395,8 +328,6 @@ def mux_prepared_dubbing_assets(shot_id: str, video_path: str, assets: dict) -> 
         "local_path": output_path,
         "dubbed": True,
         "audio_files": assets.get("audio_files") or {},
-        "subtitle_local_path": assets.get("subtitle_local_path"),
-        "subtitle_srt_local_path": assets.get("subtitle_srt_local_path"),
         "combined_audio_local_path": assets.get("combined_audio_local_path"),
         "cache_hit": bool(assets.get("cache_hit")) and _valid_media_file(output_path, min_bytes=4096),
     }
