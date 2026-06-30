@@ -11,19 +11,19 @@ run_batch.py
 
 # 续跑模式：填入已有 Task ID 可跳过规划和关键帧生成，直接续跑视频
 # 留空 "" 表示从头开始新任务
-RESUME_TASK_ID: str = "5b67458a-19fb-4fbd-a215-3c309d45652e"
+RESUME_TASK_ID: str = ""
 
 SYNOPSIS = """
-Lyra, Caden, Seraphine, Finn, and Elder Moros embark on a perilous quest to uncover the origin of a mysterious ancient seal that has begun to crack across the land. As they journey through the Whispering Highlands, they discover that forgotten gods once made a pact with mortal kingdoms to contain a primordial darkness beneath the earth. Moros, a seasoned guardian who has protected the seal for decades, guides the group through treacherous ruins and shifting labyrinths. Along the way, tensions rise between Lyra's people and the nomadic Veldran tribes, who are blamed for awakening the darkness. As Seraphine ventures deeper into the spirit realm, she learns that she carries an ancient bloodline connected to the seal itself. Meanwhile, Caden and Finn face their own trials—betrayal, sacrifice, and the courage to trust one another. In the end, the companions embrace their roles in destiny—Seraphine chooses to bind herself to the seal and restore balance to the spirit world, while Lyra rises as a new leader, forging an alliance between the kingdoms and the Veldran people, bringing lasting peace to a fractured land.
+小松鼠奇奇住在松树上。冬天快到了，它储存的松果不够，决定去远处的松林找更多。路上下起大雨，奇奇躲进树洞等雨停。雨停后它继续赶路，终于找到满满的松果，抱着松果开心回家。
 """.strip()
 
-CHARACTERS = ["Lyra", "Caden", "Seraphine", "Finn", "Elder Moros"]
+CHARACTERS = ["奇奇"]
 
 # ── 方式一：指定文件夹（推荐）──────────────────────────────────
 # 把角色参考图放入该文件夹，文件名与角色名一致（扩展名不限）
 # 例如文件夹内有：李明.png、小雨.jpg、老陈.webp
 # 留空字符串 "" 表示不使用文件夹方式
-CHARACTER_IMAGES_DIR: str = r"f:\movieagents_demo\movieagent-demo\outputs\characters"
+CHARACTER_IMAGES_DIR: str = ""
 
 # ── 方式二：手动指定路径（可与方式一并用，手动指定优先）──────
 # { 角色名: 图片路径 }，留空 {} 表示不使用
@@ -36,14 +36,15 @@ CHARACTER_REFS_PATHS: dict[str, str] = {}
 import time
 import sys
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import config
 from pipeline import tasks, create_task, run_full_pipeline
 from generation.image import generate_keyframe
-from generation.video import generate_video
-from generation.postprocess import postprocess_shot_video
+from generation.shot_pipeline import build_shot_id, generate_shot_video_artifacts, shot_video_complete
 from generation.concat import concat_videos
+from generation.subtitles import merge_sidecar_subtitles
 
 VIDEO_SLEEP = 3
 
@@ -242,6 +243,7 @@ def main():
     log("Step 3: 批量生成视频")
     log("=" * 60)
 
+    video_jobs = []
     for i, item in enumerate(all_shots):
         ss, sc, sh = item["sub_script_name"], item["scene_name"], item["shot_name"]
         shot_data = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
@@ -251,76 +253,57 @@ def main():
         keyframe_path = shot_data.get("keyframe_local_path")
         if not keyframe_path or not Path(keyframe_path).exists():
             log("  ⚠️  没有关键帧，跳过")
+            shot_data["video_status"] = "skipped_missing_keyframe"
             continue
 
-        if shot_data.get("video_local_path") and \
-                Path(shot_data["video_local_path"]).exists():
+        if shot_video_complete(shot_data):
             log("  ↳ 已有视频，跳过")
             continue
 
-        shot_id = f"{task_id}_{ss}_{sc}_{sh}".replace(" ", "_")
-        motion_prompt = (
-            shot_data.get("Camera Movement", "") + ". " +
-            shot_data.get("Coarse Plot", "")
-        ).strip()
+        shot_data["video_status"] = "queued"
+        video_jobs.append({
+            "index": i,
+            "sub_script_name": ss,
+            "scene_name": sc,
+            "shot_name": sh,
+            "shot_data": shot_data,
+            "keyframe_path": keyframe_path,
+            "shot_id": build_shot_id(task_id, ss, sc, sh),
+        })
 
-        try:
-            result = generate_video(shot_id, keyframe_path, motion_prompt)
-            raw_video_path = result["local_path"]
-            if config.ENABLE_DUBBING:
-                post_result = postprocess_shot_video(
-                    shot_id,
-                    raw_video_path,
-                    shot_data,
-                    tasks[task_id].get("voice_refs") or {},
-                )
-            else:
-                post_result = {
-                    "local_path": raw_video_path,
-                    "dubbed": False,
-                    "audio_files": {},
-                    "subtitle_local_path": None,
-                    "subtitle_srt_local_path": None,
-                    "combined_audio_local_path": None,
-                }
-            shot_ref = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
-            shot_ref["raw_video_local_path"] = raw_video_path
-            shot_ref["raw_video_url"] = f"/outputs/videos/{shot_id}.mp4"
-            shot_ref["enhanced_video_local_path"] = (
-                post_result["local_path"] if post_result.get("dubbed") else None
-            )
-            shot_ref["video_local_path"] = post_result["local_path"]
-            shot_ref["video_url"] = (
-                f"/outputs/videos/{shot_id}_dubbed.mp4"
-                if post_result.get("dubbed")
-                else f"/outputs/videos/{shot_id}.mp4"
-            )
-            shot_ref["subtitle_local_path"] = post_result.get("subtitle_local_path")
-            shot_ref["subtitle_url"] = (
-                f"/outputs/subtitles/{shot_id}.vtt"
-                if shot_ref.get("subtitle_local_path")
-                else None
-            )
-            shot_ref["subtitle_srt_local_path"] = post_result.get("subtitle_srt_local_path")
-            shot_ref["subtitle_srt_url"] = (
-                f"/outputs/subtitles/{shot_id}.srt"
-                if shot_ref.get("subtitle_srt_local_path")
-                else None
-            )
-            shot_ref["combined_audio_local_path"] = post_result.get("combined_audio_local_path")
-            shot_ref["audio_files"] = post_result.get("audio_files") or {}
-            shot_ref["video_has_dubbing"] = bool(post_result.get("dubbed"))
-            shot_ref["generation_mode"] = config.GENERATION_MODE
-            shot_ref["video_duration_seconds"] = result.get("duration_seconds")
-            shot_ref["video_resolution"] = result.get("resolution")
-            shot_ref["video_status"] = "done"
-            log(f"  ✅ 视频完成，耗时 {result['elapsed_seconds']:.1f}s")
-            save_progress()
-        except Exception as e:
-            log(f"  ❌ 视频失败: {e}")
-            continue
+    save_progress()
 
-        time.sleep(VIDEO_SLEEP)
+    max_workers = max(1, int(config.VIDEO_MAX_CONCURRENCY or 1))
+    max_workers = min(max_workers, max(1, len(video_jobs)))
+    log(f"\n待生成视频 {len(video_jobs)} 个，并发数 {max_workers}")
+
+    def run_video_job(job: dict) -> dict:
+        artifact = generate_shot_video_artifacts(
+            job["shot_id"],
+            job["shot_data"],
+            job["keyframe_path"],
+            tasks[task_id].get("voice_refs") or {},
+        )
+        return {"job": job, "artifact": artifact}
+
+    if video_jobs:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_map = {executor.submit(run_video_job, job): job for job in video_jobs}
+            for future in as_completed(future_map):
+                job = future_map[future]
+                ss, sc, sh = job["sub_script_name"], job["scene_name"], job["shot_name"]
+                shot_ref = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
+                try:
+                    result = future.result()
+                    artifact = result["artifact"]
+                    shot_ref.update(artifact["updates"])
+                    elapsed = artifact["video_result"]["elapsed_seconds"]
+                    log(f"  ✅ [{job['index']+1}/{len(all_shots)}] {ss} / {sc} / {sh} 视频完成，耗时 {elapsed:.1f}s")
+                except Exception as e:
+                    shot_ref["video_status"] = "error"
+                    shot_ref["video_error"] = str(e)
+                    log(f"  ❌ [{job['index']+1}/{len(all_shots)}] {ss} / {sc} / {sh} 视频失败: {e}")
+                save_progress()
 
     # ── Step 4: 拼接成片 ─────────────────────────────────────────
     log("\n" + "=" * 60)
@@ -328,11 +311,14 @@ def main():
     log("=" * 60)
 
     video_paths = []
+    subtitle_paths = []
     for item in all_shots:
         ss, sc, sh = item["sub_script_name"], item["scene_name"], item["shot_name"]
-        vp = tasks[task_id]["shots"][ss][sc]["Shot"][sh].get("video_local_path")
+        shot_ref = tasks[task_id]["shots"][ss][sc]["Shot"][sh]
+        vp = shot_ref.get("video_local_path")
         if vp and Path(vp).exists():
             video_paths.append(vp)
+            subtitle_paths.append(shot_ref.get("subtitle_srt_local_path"))
 
     if not video_paths:
         log("❌ 没有可拼接的视频片段")
@@ -343,7 +329,14 @@ def main():
     out_path = f"outputs/videos/{task_id}_final.mp4"
     try:
         concat_method = concat_videos(video_paths, out_path, prefer_fast=True)
+        subtitle_result = merge_sidecar_subtitles(
+            video_paths,
+            subtitle_paths,
+            f"outputs/subtitles/{task_id}_final.srt",
+            f"outputs/subtitles/{task_id}_final.vtt",
+        )
         log(f"\n🎉 成片已保存：{out_path}（拼接方式：{concat_method}）")
+        log(f"外挂字幕已保存：outputs/subtitles/{task_id}_final.vtt（{subtitle_result['entries']} 条）")
     except Exception as e:
         log(f"❌ 拼接失败: {e}")
 

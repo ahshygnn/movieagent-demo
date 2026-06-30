@@ -5,3 +5,9 @@ requests
 python-dotenv
 python-multipart
 moviepy
+anthropic
+
+# 评测模块依赖（可选，CLIP 指标需要）
+# openai-clip @ git+https://github.com/openai/CLIP.git
+Pillow>=9.0.0
+numpy>=1.24.0

@@ -122,5 +122,53 @@ class FinalVideoPathTests(unittest.TestCase):
             self.assertEqual(_collect_video_paths_for_final(task, []), [str(raw)])
 
 
+class ShotResumeTests(unittest.TestCase):
+    def test_shot_video_complete_requires_dubbing_assets_when_dialogue_exists(self):
+        from generation.shot_pipeline import shot_video_complete
+
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "dubbed.mp4"
+            audio = Path(tmp) / "dialogue.mp3"
+            vtt = Path(tmp) / "shot.vtt"
+            srt = Path(tmp) / "shot.srt"
+            video.write_bytes(b"v" * 5000)
+            audio.write_bytes(b"a" * 2048)
+            vtt.write_text("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nhello\n", encoding="utf-8")
+            srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nhello\n", encoding="utf-8")
+
+            incomplete = {
+                "video_local_path": str(video),
+                "video_has_dubbing": True,
+                "Subtitles": {"Baibai": "你好"},
+            }
+            complete = {
+                **incomplete,
+                "combined_audio_local_path": str(audio),
+                "subtitle_local_path": str(vtt),
+                "subtitle_srt_local_path": str(srt),
+            }
+
+            self.assertFalse(shot_video_complete(incomplete))
+            self.assertTrue(shot_video_complete(complete))
+
+
+class SubtitleMergeTests(unittest.TestCase):
+    def test_parse_srt_and_offset_entries(self):
+        from generation.subtitles import offset_entries, parse_srt
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "shot.srt"
+            path.write_text(
+                "1\n00:00:00,000 --> 00:00:01,500\nQiqi: 你好\n",
+                encoding="utf-8",
+            )
+
+            entries = parse_srt(str(path))
+            shifted = offset_entries(entries, 5.0)
+
+        self.assertEqual(entries, [(0.0, 1.5, "Qiqi: 你好")])
+        self.assertEqual(shifted, [(5.0, 6.5, "Qiqi: 你好")])
+
+
 if __name__ == "__main__":
     unittest.main()

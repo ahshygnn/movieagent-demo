@@ -100,6 +100,41 @@ from agents.base_agent import BaseAgent
 import config
 
 
+def _boxes_overlap(box_a: list, box_b: list) -> bool:
+    if not (isinstance(box_a, list) and len(box_a) == 4 and isinstance(box_b, list) and len(box_b) == 4):
+        return False
+    x1a, y1a, x2a, y2a = box_a
+    x1b, y1b, x2b, y2b = box_b
+    return x1a < x2b and x2a > x1b and y1a < y2b and y2a > y1b
+
+
+def _fix_bounding_boxes(shot_data: dict) -> None:
+    involving = shot_data.get("Involving Characters")
+    if not isinstance(involving, dict) or len(involving) < 2:
+        return
+    chars = list(involving.keys())
+    boxes = [involving[c] for c in chars]
+    has_overlap = any(
+        _boxes_overlap(boxes[i], boxes[j])
+        for i in range(len(boxes))
+        for j in range(i + 1, len(boxes))
+    )
+    if not has_overlap:
+        return
+    # Redistribute evenly across horizontal axis
+    n = len(chars)
+    step = 1.0 / n
+    for i, char in enumerate(chars):
+        involving[char] = [round(i * step + 0.01, 2), 0.0, round((i + 1) * step - 0.01, 2), 1.0]
+
+
+def _postprocess_shot_result(result: dict) -> dict:
+    result.pop("Internal Chain-of-Thought", None)
+    for shot_data in result.get("Shot", {}).values():
+        _fix_bounding_boxes(shot_data)
+    return result
+
+
 def run_shot_agent(scene_details: dict) -> dict:
     agent = BaseAgent(system_prompt=SHOT_PROMPT, temp=0.7)
     shot_count_instruction = ""
@@ -109,6 +144,7 @@ def run_shot_agent(scene_details: dict) -> dict:
             f"Create no more than {config.SHOT_MAX_PER_SCENE} essential shots for this scene. "
             "Prioritize story clarity and avoid transitional or redundant shots."
         )
+    style_anchor = scene_details.get("Visual Style", "")
     query = f"""Given the following Scene Details:
 - Involving Characters: "{scene_details['Involving Characters']}"
 - Plot: "{scene_details['Plot']}"
@@ -116,7 +152,9 @@ def run_shot_agent(scene_details: dict) -> dict:
 - Emotional Tone: "{scene_details['Emotional Tone']}"
 - Key Props: {scene_details['Key Props']}
 - Cinematography Notes: "{scene_details['Cinematography Notes']}"
+- [STYLE ANCHOR] Visual Style (must remain strictly consistent across every shot in this scene): "{style_anchor}"
 {shot_count_instruction}
 """
     result = agent(query, parse=True)
+    result = _postprocess_shot_result(result)
     return {"result": result, "usage": agent.get_usage()}

@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import subprocess
@@ -5,9 +6,9 @@ from pathlib import Path
 from typing import Iterable
 
 import numpy as np
-import requests
 
 import config
+from tts.service import TTSService
 
 
 PAUSE_SECONDS = 0.35
@@ -90,11 +91,10 @@ def _safe_name(value: str) -> str:
 
 def _voice_for_speaker(speaker: str, voice_refs: dict | None) -> str:
     refs = voice_refs or {}
-    voice = refs.get(speaker) or getattr(config, "DEFAULT_TTS_VOICE", "")
+    voice = refs.get(speaker) or getattr(config, "YIZHAN_TTS_DEFAULT_VOICE", "") or "Cherry"
     if not voice:
         raise ValueError(
-            f"No voice configured for {speaker}. Set DEFAULT_TTS_VOICE in .env "
-            "or upload a reference voice for this character."
+            f"No voice configured for {speaker}. Set YIZHAN_TTS_DEFAULT_VOICE in .env."
         )
     return voice
 
@@ -103,31 +103,45 @@ def synthesize_speech(
     text: str,
     voice: str,
     output_path: str,
-    model: str = "FunAudioLLM/CosyVoice2-0.5B",
+    model: str | None = None,
 ) -> str:
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    headers = {
-        "Authorization": f"Bearer {config.SILICONFLOW_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "input": text,
-        "voice": voice,
-        "response_format": "mp3",
-        "stream": False,
-    }
-    resp = requests.post(
-        f"{config.BASE_URL}/audio/speech",
-        json=payload,
-        headers=headers,
-        timeout=120,
+    service = TTSService()
+    return service.synthesize(
+        text=text,
+        voice=voice,
+        output_path=output_path,
+        response_format="mp3",
+        model=model or getattr(config, "YIZHAN_TTS_MODEL", "qwen3-tts-flash"),
     )
-    if resp.status_code != 200:
-        raise RuntimeError(f"TTS failed {resp.status_code}: {resp.text}")
-    with open(output_path, "wb") as f:
-        f.write(resp.content)
-    return output_path
+
+
+def _audio_meta_path(audio_path: str) -> str:
+    return f"{audio_path}.json"
+
+
+def _read_json(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_json(path: str, data: dict) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _tts_cache_valid(audio_path: str, text: str, voice: str, model: str) -> bool:
+    if not _valid_media_file(audio_path):
+        return False
+    meta = _read_json(_audio_meta_path(audio_path))
+    return (
+        meta.get("text") == text
+        and meta.get("voice") == voice
+        and meta.get("model") == model
+    )
 
 
 def _audio_duration(path: str) -> float:
@@ -148,6 +162,15 @@ def _video_duration(path: str) -> float:
         return float(clip.duration or 0)
     finally:
         clip.close()
+
+
+def _valid_media_file(path: str | None, min_bytes: int = 1024) -> bool:
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        return os.path.getsize(path) >= min_bytes
+    except OSError:
+        return False
 
 
 def _combine_audio(audio_paths: list[str], output_path: str, pause_seconds: float) -> str:
@@ -212,76 +235,6 @@ def _ffmpeg_exe() -> str:
         return "ffmpeg"
 
 
-def _filter_path(path: str) -> str:
-    normalized = Path(path).resolve().as_posix()
-    if re.match(r"^[A-Za-z]:/", normalized):
-        normalized = f"{normalized[0]}\\:{normalized[2:]}"
-    return (
-        normalized.replace("'", "\\'")
-        .replace(",", "\\,")
-        .replace("[", "\\[")
-        .replace("]", "\\]")
-    )
-
-
-def _subtitle_style() -> str:
-    font = getattr(config, "SUBTITLE_FONT", "Microsoft YaHei")
-    size = int(getattr(config, "SUBTITLE_FONT_SIZE", 28) or 28)
-    return (
-        f"FontName={font},FontSize={size},"
-        "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-        "BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=36"
-    )
-
-
-def burn_subtitles_and_audio(
-    video_path: str,
-    audio_path: str,
-    subtitle_path: str,
-    output_path: str,
-) -> str:
-    video_duration = _video_duration(video_path)
-    audio_duration = _audio_duration(audio_path)
-    extend_by = max(0.0, audio_duration - video_duration)
-
-    vf_parts = []
-    if extend_by > 0.05:
-        vf_parts.append(f"tpad=stop_mode=clone:stop_duration={extend_by:.3f}")
-    vf_parts.append(
-        f"subtitles='{_filter_path(subtitle_path)}':force_style='{_subtitle_style()}'"
-    )
-    vf = ",".join(vf_parts)
-
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        _ffmpeg_exe(),
-        "-y",
-        "-i",
-        video_path,
-        "-i",
-        audio_path,
-        "-map",
-        "0:v:0",
-        "-map",
-        "1:a:0",
-        "-vf",
-        vf,
-        "-c:v",
-        "libx264",
-        "-c:a",
-        "aac",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        output_path,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg subtitle/audio mux failed: {result.stderr}")
-    return output_path
-
-
 def mux_audio_with_video(
     video_path: str,
     audio_path: str,
@@ -332,34 +285,71 @@ def postprocess_shot_video(
     voice_refs: dict | None = None,
     pause_seconds: float = PAUSE_SECONDS,
 ) -> dict:
+    assets = prepare_dubbing_assets(shot_id, shot_data, voice_refs, pause_seconds)
+    if not assets.get("dubbed"):
+        return empty_dubbing_result(video_path)
+    return mux_prepared_dubbing_assets(shot_id, video_path, assets)
+
+
+def empty_dubbing_result(video_path: str) -> dict:
+    return {
+        "local_path": video_path,
+        "dubbed": False,
+        "audio_files": {},
+        "subtitle_local_path": None,
+        "subtitle_srt_local_path": None,
+        "combined_audio_local_path": None,
+        "cache_hit": False,
+    }
+
+
+def prepare_dubbing_assets(
+    shot_id: str,
+    shot_data: dict,
+    voice_refs: dict | None = None,
+    pause_seconds: float = PAUSE_SECONDS,
+) -> dict:
     lines = collect_subtitle_lines(shot_data.get("Subtitles"))
     if not lines:
         return {
-            "local_path": video_path,
             "dubbed": False,
             "audio_files": {},
             "subtitle_local_path": None,
             "subtitle_srt_local_path": None,
             "combined_audio_local_path": None,
+            "cache_hit": False,
         }
 
     os.makedirs("outputs/audio", exist_ok=True)
     os.makedirs("outputs/subtitles", exist_ok=True)
-    os.makedirs(config.VIDEO_DIR, exist_ok=True)
 
     audio_files: dict[str, str] = {}
     timed_lines: list[tuple[str, str, float]] = []
     ordered_audio_paths: list[str] = []
+    cache_hit = True
 
     for index, (speaker, text) in enumerate(lines, start=1):
         voice = _voice_for_speaker(speaker, voice_refs)
+        model = getattr(config, "YIZHAN_TTS_MODEL", "qwen3-tts-flash")
         safe_speaker = _safe_name(speaker)
         audio_path = os.path.join(
             "outputs/audio",
-            f"{shot_id}_{index:02d}_{safe_speaker}.mp3",
+            f"{shot_id}_{index:02d}_{safe_speaker}.wav",
         )
-        synthesize_speech(text, voice, audio_path)
-        duration = _audio_duration(audio_path)
+        if _tts_cache_valid(audio_path, text, voice, model):
+            try:
+                duration = _audio_duration(audio_path)
+            except Exception:
+                Path(audio_path).unlink(missing_ok=True)
+                synthesize_speech(text, voice, audio_path, model=model)
+                _write_json(_audio_meta_path(audio_path), {"text": text, "voice": voice, "model": model})
+                duration = _audio_duration(audio_path)
+                cache_hit = False
+        else:
+            synthesize_speech(text, voice, audio_path, model=model)
+            _write_json(_audio_meta_path(audio_path), {"text": text, "voice": voice, "model": model})
+            duration = _audio_duration(audio_path)
+            cache_hit = False
         audio_files[f"{speaker}_{index}"] = audio_path
         ordered_audio_paths.append(audio_path)
         timed_lines.append((speaker, text, duration))
@@ -371,16 +361,42 @@ def postprocess_shot_video(
     write_vtt(subtitle_entries, subtitle_vtt_path)
 
     combined_audio_path = os.path.join("outputs/audio", f"{shot_id}_dialogue.mp3")
-    _combine_audio(ordered_audio_paths, combined_audio_path, pause_seconds)
-
-    output_path = os.path.join(config.VIDEO_DIR, f"{shot_id}_dubbed.mp4")
-    mux_audio_with_video(video_path, combined_audio_path, output_path)
+    if cache_hit and _valid_media_file(combined_audio_path):
+        try:
+            _audio_duration(combined_audio_path)
+        except Exception:
+            Path(combined_audio_path).unlink(missing_ok=True)
+            _combine_audio(ordered_audio_paths, combined_audio_path, pause_seconds)
+            cache_hit = False
+    else:
+        _combine_audio(ordered_audio_paths, combined_audio_path, pause_seconds)
+        cache_hit = False
 
     return {
-        "local_path": output_path,
         "dubbed": True,
         "audio_files": audio_files,
         "subtitle_local_path": subtitle_vtt_path,
         "subtitle_srt_local_path": subtitle_srt_path,
         "combined_audio_local_path": combined_audio_path,
+        "cache_hit": cache_hit,
+    }
+
+
+def mux_prepared_dubbing_assets(shot_id: str, video_path: str, assets: dict) -> dict:
+    if not assets.get("dubbed"):
+        return empty_dubbing_result(video_path)
+
+    output_path = os.path.join(config.VIDEO_DIR, f"{shot_id}_dubbed.mp4")
+    if not assets.get("cache_hit") or not _valid_media_file(output_path, min_bytes=4096):
+        os.makedirs(config.VIDEO_DIR, exist_ok=True)
+        mux_audio_with_video(video_path, assets["combined_audio_local_path"], output_path)
+
+    return {
+        "local_path": output_path,
+        "dubbed": True,
+        "audio_files": assets.get("audio_files") or {},
+        "subtitle_local_path": assets.get("subtitle_local_path"),
+        "subtitle_srt_local_path": assets.get("subtitle_srt_local_path"),
+        "combined_audio_local_path": assets.get("combined_audio_local_path"),
+        "cache_hit": bool(assets.get("cache_hit")) and _valid_media_file(output_path, min_bytes=4096),
     }

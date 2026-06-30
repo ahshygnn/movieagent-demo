@@ -21,7 +21,13 @@ def _image_to_base64(path: str) -> str:
     return f"data:image/{mime};base64,{b64}"
 
 
-def _call_api(prompt: str, ref_images: list, timeout: int = 150) -> str:
+def _get_keyframe_size(mode: str | None = None) -> str:
+    """返回当前档位对应的关键帧尺寸字符串。"""
+    m = mode or config.KEYFRAME_MODE
+    return config.KEYFRAME_SIZE_DRAFT if m == "draft" else config.KEYFRAME_SIZE_FINAL
+
+
+def _call_api(prompt: str, ref_images: list, size: str = "", timeout: int = 150) -> str:
     """调用 Seedream API，返回图片 URL。失败时抛出异常。"""
     headers = {
         "Content-Type": "application/json",
@@ -30,7 +36,7 @@ def _call_api(prompt: str, ref_images: list, timeout: int = 150) -> str:
     payload = {
         "model": "doubao-seedream-5-0-260128",
         "prompt": prompt,
-        "size": "2848x1600",
+        "size": size or _get_keyframe_size(),
         "output_format": "png",
         "watermark": False,
         "response_format": "url",
@@ -50,14 +56,17 @@ def _call_api(prompt: str, ref_images: list, timeout: int = 150) -> str:
 
 
 def generate_keyframe(shot_plot: str, shot_id: str,
-                      character_refs: dict = None) -> dict:
+                      character_refs: dict = None,
+                      mode: str | None = None) -> dict:
     """
-    调用火山方舟 Seedream 5.0 lite 生成关键帧。
+    调用火山方舟 Seedream 5.0 生成关键帧。
 
     character_refs: {"角色名": "/local/path/to/image.png", ...}
     最多传 14 张参考图（接口限制：输入图 + 输出图 ≤ 15）。
+    mode: "draft"（1024x576）或 "final"（1280x720），None 则读 config.KEYFRAME_MODE。
     """
     start = time.time()
+    size = _get_keyframe_size(mode)
 
     # 构建参考图列表
     ref_images = []
@@ -79,7 +88,7 @@ def generate_keyframe(shot_plot: str, shot_id: str,
     last_err = None
     for i, (prompt, images) in enumerate(attempts):
         try:
-            image_url = _call_api(prompt, images)
+            image_url = _call_api(prompt, images, size=size)
             break
         except Exception as e:
             last_err = e
@@ -97,17 +106,30 @@ def generate_keyframe(shot_plot: str, shot_id: str,
     else:
         raise Exception(f"生成关键帧失败（已重试 3 次）：{last_err}")
 
-    # 下载图片保存到本地
+    # 下载图片保存到本地（带重试，大图下载易断连）
     os.makedirs(config.KEYFRAME_DIR, exist_ok=True)
     local_path = os.path.join(config.KEYFRAME_DIR, f"{shot_id}.png")
-    img_resp = requests.get(image_url, timeout=60)
-    img_resp.raise_for_status()
-    with open(local_path, "wb") as f:
-        f.write(img_resp.content)
+    last_dl_err = None
+    for dl_attempt in range(3):
+        try:
+            img_resp = requests.get(image_url, timeout=120, stream=True)
+            img_resp.raise_for_status()
+            with open(local_path, "wb") as f:
+                for chunk in img_resp.iter_content(chunk_size=1024 * 256):
+                    if chunk:
+                        f.write(chunk)
+            break
+        except Exception as e:
+            last_dl_err = e
+            print(f"  [图片下载重试 {dl_attempt+2}/3] {e}")
+            time.sleep(3)
+    else:
+        raise Exception(f"图片下载失败（已重试 3 次）：{last_dl_err}")
 
     elapsed = round(time.time() - start, 2)
     return {
         "local_path": local_path,
         "elapsed_seconds": elapsed,
         "inference_time": 0,
+        "keyframe_size": size,
     }

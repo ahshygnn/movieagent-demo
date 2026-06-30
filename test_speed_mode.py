@@ -1,8 +1,10 @@
 import unittest
 from unittest import mock
+import tempfile
+from pathlib import Path
 
 from generation.concat import _concat_list_line
-from generation.video import build_video_prompt
+from generation.video import build_video_prompt, generate_video
 
 
 class SpeedModeConfigTests(unittest.TestCase):
@@ -29,8 +31,21 @@ class SpeedModeConfigTests(unittest.TestCase):
             reloaded = importlib.reload(config)
             self.assertEqual(reloaded.GENERATION_MODE, "draft")
             self.assertTrue(reloaded.ENABLE_DUBBING)
-            self.assertEqual(reloaded.VIDEO_DURATION_SECONDS, 3)
+            self.assertEqual(reloaded.VIDEO_DURATION_SECONDS, 5)
+            self.assertEqual(reloaded.VIDEO_MAX_CONCURRENCY, 2)
             importlib.reload(config)
+
+    def test_generate_video_reuses_existing_raw_video(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = Path(tmp) / "cached_shot.mp4"
+            existing.write_bytes(b"0" * 5000)
+
+            with mock.patch("config.VIDEO_DIR", tmp), mock.patch("generation.video.submit_video") as submit:
+                result = generate_video("cached_shot", "unused.png", "slow push")
+
+            self.assertEqual(result["local_path"], str(existing))
+            self.assertTrue(result["cache_hit"])
+            submit.assert_not_called()
 
 
 if __name__ == "__main__":

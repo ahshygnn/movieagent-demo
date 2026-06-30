@@ -12,6 +12,13 @@ import config
 ARK_BASE = "https://ark.cn-beijing.volces.com/api/v3"
 
 
+def _valid_video_file(path: str, min_bytes: int = 4096) -> bool:
+    try:
+        return os.path.isfile(path) and os.path.getsize(path) >= min_bytes
+    except OSError:
+        return False
+
+
 def _ark_headers() -> dict:
     return {
         "Authorization": f"Bearer {config.ARK_API_KEY}",
@@ -88,7 +95,7 @@ def poll_video_status(task_id: str) -> dict:
         resp = requests.get(
             f"{ARK_BASE}/contents/generations/tasks/{task_id}",
             headers=_ark_headers(),
-            timeout=30,
+            timeout=90,
         )
         if resp.status_code != 200:
             raise Exception(f"Seedance 状态查询失败 {resp.status_code}: {resp.text}")
@@ -123,6 +130,17 @@ def generate_video(
     start = time.time()
     duration = int(duration_seconds or config.VIDEO_DURATION_SECONDS)
     video_resolution = (resolution or config.VIDEO_RESOLUTION or "720p").strip()
+    os.makedirs(config.VIDEO_DIR, exist_ok=True)
+    local_path = os.path.join(config.VIDEO_DIR, f"{shot_id}.mp4")
+
+    if _valid_video_file(local_path):
+        return {
+            "local_path": local_path,
+            "elapsed_seconds": 0.0,
+            "duration_seconds": duration,
+            "resolution": video_resolution,
+            "cache_hit": True,
+        }
 
     task_id = submit_video(keyframe_path, motion_prompt, duration, video_resolution)
     result = poll_video_status(task_id)
@@ -130,12 +148,30 @@ def generate_video(
     if result["status"] != "succeeded":
         raise Exception(f"视频生成失败：{result.get('reason')}")
 
-    os.makedirs(config.VIDEO_DIR, exist_ok=True)
-    local_path = os.path.join(config.VIDEO_DIR, f"{shot_id}.mp4")
-    video_resp = requests.get(result["video_url"], timeout=120)
-    video_resp.raise_for_status()
-    with open(local_path, "wb") as f:
-        f.write(video_resp.content)
+    last_dl_err = None
+    for dl_attempt in range(3):
+        try:
+            video_resp = requests.get(result["video_url"], timeout=180, stream=True)
+            video_resp.raise_for_status()
+            with open(local_path, "wb") as f:
+                for chunk in video_resp.iter_content(chunk_size=1024 * 256):
+                    if chunk:
+                        f.write(chunk)
+            if _valid_video_file(local_path):
+                break
+            raise OSError(f"下载完成但文件无效: {local_path}")
+        except Exception as e:
+            last_dl_err = e
+            if os.path.isfile(local_path):
+                try:
+                    os.remove(local_path)
+                except OSError:
+                    pass
+            if dl_attempt < 2:
+                print(f"  [视频下载重试 {dl_attempt + 2}/3] {e}")
+                time.sleep(5 * (dl_attempt + 1))
+                continue
+            raise Exception(f"视频下载失败（已重试 3 次）：{last_dl_err}") from last_dl_err
 
     elapsed = time.time() - start
     return {
@@ -143,4 +179,5 @@ def generate_video(
         "elapsed_seconds": round(elapsed, 2),
         "duration_seconds": duration,
         "resolution": video_resolution,
+        "cache_hit": False,
     }
