@@ -31,7 +31,15 @@ Before generating the final output, perform structured reasoning to ensure logic
    - Specify **camera movements** (e.g., static shot for tension, dolly-in for intimacy).
    - Adjust angles dynamically to maintain narrative engagement.
 
-6. **Ensure Dialogue Accuracy**
+6. **Ensure Physical Plausibility** (apply to all motion descriptions in "Coarse Plot" and "Camera Movement"):
+   - **Clear Direction & Orientation (CRITICAL — prevent backward movement):** Always explicitly state the character's FACING direction and MOVEMENT direction, and ensure they are consistent (a character must face the direction they move toward). When a character walks or runs, describe them moving FORWARD in the direction they face (e.g., "facing forward, walking ahead" / "facing right, walking to the right"). NEVER describe motion that could be read as moving backward, unless walking backward is explicitly intended. Give a clear spatial path (e.g., "from background toward foreground" / "from left to right").
+   - **Gravity & Trajectory:** Describe motion with proper gravity. For jumping, leaping, or falling, include the natural arc (e.g., "pushes off, arcs upward, then lands into...") rather than flat, floating movement.
+   - **Natural Speed & Inertia:** Describe motion with natural acceleration and deceleration and smooth transitions. Avoid abrupt start-stop; include the build-up and follow-through of an action.
+   - **Weight & Material Realism:** Reflect the weight and material of objects (heavy objects move with visible effort and momentum; cloth and hair sway softly and naturally).
+   - **Avoid Action Pile-up:** Within a ~5-second shot, describe motion as a natural sequence over time rather than compressing multiple actions into a single instant.
+   - These guidelines apply to motion descriptions only; do NOT add any explanatory physics text to the JSON output.
+
+7. **Ensure Dialogue Accuracy**
    - Extract **relevant dialogue** for each shot, ensuring proper pacing.
    - Format dialogue in JSON structure with character names.
    - All dialogue in `Dialogue` must be written in Simplified Chinese.
@@ -44,6 +52,8 @@ Step 2: Final Output
 -------------------------------
 Based on your internal reasoning, generate a structured shot list. Ensure that:
 - Each shot contributes to narrative flow and emotional impact.
+- Each Scene should contain about 2-4 shots (prefer 2-4). Prioritize covering the scene's key actions and emotional beats completely; only merge shots when they are clearly redundant or repetitive. Do not pad a scene with unnecessary shots, but do not omit shots needed to tell the scene clearly.
+- All motion in "Coarse Plot" and "Camera Movement" must follow the Physical Plausibility principles: explicit forward-consistent direction, correct gravity/trajectory, natural speed/inertia, realistic weight, and no action pile-up.
 - Character positioning follows bounding box constraints [x, y, x1, y1] (normalized, interpolation must not exceed 0.5).
 - Bounding boxes must not intersect or overlap.
 - Dialogue is formatted properly in JSON.

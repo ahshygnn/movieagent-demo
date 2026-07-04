@@ -14,11 +14,20 @@ def build_shot_id(task_id: str, sub_script_name: str, scene_name: str, shot_name
     return f"{task_id}_{sub_script_name}_{scene_name}_{shot_name}".replace(" ", "_")
 
 
+PHYSICS_HINT = (
+    "natural physics, correct gravity and weight, "
+    "characters always face and move forward in their walking direction "
+    "(no backward or reversed movement), coherent motion direction, "
+    "smooth realistic movement"
+)
+
+
 def build_motion_prompt(shot_data: dict) -> str:
-    return (
+    base = (
         (shot_data.get("Camera Movement", "") or "") + ". " +
         (shot_data.get("Coarse Plot", "") or "")
     ).strip()
+    return f"{base}. {PHYSICS_HINT}"
 
 
 def empty_postprocess_result(raw_video_path: str) -> dict:

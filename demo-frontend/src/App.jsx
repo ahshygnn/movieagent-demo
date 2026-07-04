@@ -1,5 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, Fragment } from 'react'
 import demoData from './data/demo_data.json'
+
+// ─── ANIMATION PHASES ─────────────────────────────────────────────────────────
+// empty → typing_raw → rewriting → typing_synopsis → director → scenes → done
 
 const COLORS = {
   pageBg: '#120e0a',
@@ -139,8 +142,54 @@ const CharacterPill = ({ name, color }) => (
   </span>
 )
 
+// ─── skeleton helpers (框架常驻 · 数据流入) ─────────────────────────────────────
+// A shimmering placeholder bar shown in the shell while data has not arrived yet.
+const SkeletonBar = ({ w = '100%', h = 10, radius = 4, style = {} }) => (
+  <div
+    className="mag-skeleton"
+    style={{ width: w, height: h, borderRadius: radius, ...style }}
+  />
+)
+
+// One placeholder shot row filling every storyboard column with skeleton bars.
+const SkeletonShotRow = () => (
+  <tr style={{ background: COLORS.cardBg, borderBottom: `1px solid ${COLORS.cardBorder}` }}>
+    <td className="px-2 py-2"><SkeletonBar w="22px" /></td>
+    <td className="px-2 py-2"><SkeletonBar w="30px" /></td>
+    <td className="px-2 py-2"><SkeletonBar w="64px" h={40} radius={4} /></td>
+    <td className="px-2 py-2" style={{ maxWidth: '180px' }}>
+      <SkeletonBar /><div style={{ height: '4px' }} /><SkeletonBar w="72%" />
+    </td>
+    <td className="px-2 py-2"><SkeletonBar w="42px" h={16} radius={999} /></td>
+    <td className="px-2 py-2"><SkeletonBar w="60px" /></td>
+    <td className="px-2 py-2"><SkeletonBar w="60px" /></td>
+    <td className="px-2 py-2"><SkeletonBar w="84px" /></td>
+    <td className="px-2 py-2"><SkeletonBar w="44px" h={16} radius={999} /></td>
+    <td className="px-2 py-2"><SkeletonBar w="44px" h={16} radius={999} /></td>
+    <td className="px-2 py-2"><SkeletonBar w="48px" /></td>
+  </tr>
+)
+
+// Map the current animation phase to an overall progress percentage (0-100).
+function phaseProgress(animPhase, visibleSceneCount, sceneTotal) {
+  switch (animPhase) {
+    case 'empty': return 0
+    case 'typing_raw': return 12
+    case 'rewriting': return 28
+    case 'typing_synopsis': return 45
+    case 'director': return 60
+    case 'scenes':
+      return Math.min(95, 60 + Math.round((visibleSceneCount / Math.max(sceneTotal, 1)) * 35))
+    case 'done': return 100
+    default: return 0
+  }
+}
+
 // ─── TOP BAR ─────────────────────────────────────────────────────────────────
-function TopBar() {
+function TopBar({ animPhase, onStartDemo, onReset }) {
+  const isDone = animPhase === 'done'
+  const isAnimating = animPhase !== 'empty' && animPhase !== 'done'
+
   return (
     <div
       className="flex items-center px-4 gap-4 flex-shrink-0"
@@ -153,35 +202,62 @@ function TopBar() {
       <span className="font-bold text-base" style={{ color: COLORS.textPrimary }}>
         🎬 MovieAgent Demo
       </span>
-      <span style={{ color: COLORS.textMuted }} className="text-xs">
-        TaskID:&nbsp;
-        <span style={{ color: COLORS.textSecondary }} className="font-mono">
-          f6731663
-        </span>
-      </span>
-      <span className="flex items-center gap-1 text-xs" style={{ color: COLORS.statusGreen }}>
-        <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.statusGreen }} />
-        已完成 100%
-      </span>
+      {isDone && (
+        <>
+          <span style={{ color: COLORS.textMuted }} className="text-xs">
+            TaskID:&nbsp;
+            <span style={{ color: COLORS.textSecondary }} className="font-mono">
+              f6731663
+            </span>
+          </span>
+          <span className="flex items-center gap-1 text-xs" style={{ color: COLORS.statusGreen }}>
+            <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.statusGreen }} />
+            已完成 100%
+          </span>
+        </>
+      )}
       <div className="flex-1" />
-      <button
-        onClick={demoAlert}
-        className="text-xs px-3 py-1 rounded"
-        style={{
-          border: `1px solid ${COLORS.cardBorder}`,
-          color: COLORS.textSecondary,
-          background: 'transparent',
-        }}
-      >
-        刷新
-      </button>
+      {isDone ? (
+        <button
+          onClick={onReset}
+          className="text-xs px-3 py-1 rounded"
+          style={{
+            border: `1px solid ${COLORS.cardBorder}`,
+            color: COLORS.textSecondary,
+            background: 'transparent',
+            cursor: 'pointer',
+          }}
+        >
+          ↺ 重置
+        </button>
+      ) : isAnimating ? (
+        <span className="text-xs px-3 py-1 rounded" style={{ color: COLORS.textMuted, border: `1px solid ${COLORS.cardBorder}` }}>
+          ⏳ 加载中...
+        </span>
+      ) : (
+        <button
+          onClick={onStartDemo}
+          className="text-xs px-3 py-1 rounded font-medium"
+          style={{
+            border: `1px solid ${COLORS.accentPurple}`,
+            color: COLORS.accentLight,
+            background: `${COLORS.accentPurple}18`,
+            cursor: 'pointer',
+          }}
+        >
+          📂 案例展示
+        </button>
+      )}
     </div>
   )
 }
 
 // ─── LEFT PANEL ──────────────────────────────────────────────────────────────
-function LeftPanel() {
+function LeftPanel({ animPhase, rawTyped, synopsisTyped }) {
   const { synopsis, raw_synopsis, characters } = demoData.story
+
+  const hasSynopsis = !['empty', 'typing_raw', 'rewriting'].includes(animPhase)
+  const hasChars = ['director', 'scenes', 'done'].includes(animPhase)
 
   const initials = (name) => name.slice(0, 1)
 
@@ -203,9 +279,14 @@ function LeftPanel() {
       </div>
 
       {/* Script Rewriter */}
-      <ScriptRewriterPanel rawSynopsis={raw_synopsis} rewrittenSynopsis={synopsis} />
+      <ScriptRewriterPanel
+        rawSynopsis={animPhase === 'empty' ? '' : rawTyped}
+        rewrittenSynopsis={synopsisTyped}
+        animPhase={animPhase}
+        rawPlaceholder={raw_synopsis}
+      />
 
-      {/* Rewritten Synopsis */}
+      {/* Rewritten Synopsis — container always present, fills in when改写完成 */}
       <div>
         <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
           改写后剧本 / Rewritten Synopsis
@@ -214,50 +295,76 @@ function LeftPanel() {
           className="text-xs leading-relaxed overflow-y-auto rounded p-2"
           style={{
             color: COLORS.textSecondary,
+            minHeight: '68px',
             maxHeight: '160px',
             background: COLORS.pageBg,
             border: `1px solid ${COLORS.cardBorder}`,
           }}
         >
-          {synopsis}
+          {hasSynopsis ? (
+            <>
+              {synopsisTyped}
+              {animPhase === 'typing_synopsis' && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '2px',
+                    height: '12px',
+                    background: COLORS.accentPurple,
+                    marginLeft: '1px',
+                    verticalAlign: 'middle',
+                    animation: 'blink 0.7s step-end infinite',
+                  }}
+                />
+              )}
+            </>
+          ) : (
+            <div className="flex flex-col gap-1.5 pt-0.5">
+              <SkeletonBar /><SkeletonBar w="94%" /><SkeletonBar w="82%" />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Characters */}
+      {/* Characters — container always present */}
       <div>
         <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
           角色（Characters）
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {characters.map((c) => (
-            <CharacterPill key={c.name} name={c.name} color={c.color} />
-          ))}
+          {hasChars
+            ? characters.map((c) => (
+                <CharacterPill key={c.name} name={c.name} color={c.color} />
+              ))
+            : [0, 1, 2].map((i) => <SkeletonBar key={i} w="48px" h={18} radius={999} />)}
         </div>
       </div>
 
-      {/* Character reference images */}
+      {/* Character reference images — container always present */}
       <div>
         <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
           角色参考图
         </div>
         <div className="flex gap-2">
-          {characters.map((c) => (
-            <div key={c.name} className="flex flex-col items-center gap-1">
-              <div
-                className="w-14 h-14 rounded-lg flex items-center justify-center text-lg font-bold"
-                style={{
-                  background: `${c.color}22`,
-                  border: `1px solid ${c.color}55`,
-                  color: c.color,
-                }}
-              >
-                {initials(c.name)}
-              </div>
-              <span className="text-xs" style={{ color: COLORS.textMuted }}>
-                {c.name}
-              </span>
-            </div>
-          ))}
+          {hasChars
+            ? characters.map((c) => (
+                <div key={c.name} className="flex flex-col items-center gap-1">
+                  <div
+                    className="w-14 h-14 rounded-lg flex items-center justify-center text-lg font-bold"
+                    style={{
+                      background: `${c.color}22`,
+                      border: `1px solid ${c.color}55`,
+                      color: c.color,
+                    }}
+                  >
+                    {initials(c.name)}
+                  </div>
+                  <span className="text-xs" style={{ color: COLORS.textMuted }}>
+                    {c.name}
+                  </span>
+                </div>
+              ))
+            : [0, 1, 2].map((i) => <SkeletonBar key={i} w="56px" h={56} radius={8} />)}
         </div>
       </div>
 
@@ -281,9 +388,19 @@ function LeftPanel() {
 }
 
 // ─── SCRIPT REWRITER PANEL ───────────────────────────────────────────────────
-function ScriptRewriterPanel({ rawSynopsis, rewrittenSynopsis }) {
+function ScriptRewriterPanel({ rawSynopsis, rewrittenSynopsis, animPhase, rawPlaceholder }) {
   const [open, setOpen] = useState(false)
   const [section, setSection] = useState('output')
+  const textareaRef = useRef(null)
+  const isRewriting = animPhase === 'rewriting'
+  const isEmpty = animPhase === 'empty'
+
+  // Auto-scroll textarea as text types in
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.scrollTop = textareaRef.current.scrollHeight
+    }
+  }, [rawSynopsis])
 
   const thinkText = `[Script Rewriter Thinking]\n\n→ 分析原始输入的叙事结构平铺问题\n→ 识别核心情节点与角色关系\n→ 规划叙事弧度：铺垫 → 冲突 → 高潮 → 悬念收尾\n→ 为角色补充性格标签与身份辨识度\n→ 增强环境描写与情绪渲染\n→ 检验：未添加原文不存在的情节或角色\n\n（完整版将展示模型真实输出的 Chain-of-Thought）`
 
@@ -306,26 +423,51 @@ function ScriptRewriterPanel({ rawSynopsis, rewrittenSynopsis }) {
       </div>
 
       {/* Raw input textarea */}
-      <textarea
-        defaultValue={rawSynopsis}
-        rows={4}
-        className="w-full text-xs rounded p-2"
-        style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textSecondary, resize: 'vertical', outline: 'none' }}
-      />
+      <div style={{ position: 'relative' }}>
+        <textarea
+          ref={textareaRef}
+          value={rawSynopsis}
+          readOnly
+          rows={4}
+          placeholder={isEmpty ? '在这里输入你的故事...' : ''}
+          className="w-full text-xs rounded p-2"
+          style={{
+            background: COLORS.pageBg,
+            border: `1px solid ${COLORS.cardBorder}`,
+            color: COLORS.textSecondary,
+            resize: 'vertical',
+            outline: 'none',
+          }}
+        />
+        {/* Typing cursor */}
+        {(animPhase === 'typing_raw') && (
+          <span style={{
+            position: 'absolute',
+            bottom: '8px',
+            right: '8px',
+            width: '2px',
+            height: '13px',
+            background: COLORS.accentPurple,
+            display: 'inline-block',
+            animation: 'blink 0.7s step-end infinite',
+          }} />
+        )}
+      </div>
 
-      {/* Rewrite button */}
+      {/* Rewrite button — shows "改写中..." during rewriting phase */}
       <button
-        onClick={demoAlert}
+        onClick={isRewriting || isEmpty ? undefined : demoAlert}
         className="w-full text-xs py-1.5 rounded font-medium"
         style={{
-          background: COLORS.accentPurple,
+          background: isRewriting ? `${COLORS.accentPurple}55` : COLORS.accentPurple,
           color: '#1a1410',
           border: 'none',
-          boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
-          cursor: 'pointer',
+          boxShadow: isRewriting ? 'none' : '0 2px 10px rgba(245,158,11,0.25)',
+          cursor: isRewriting ? 'default' : 'pointer',
+          transition: 'all 0.3s ease',
         }}
       >
-        ✨ 改写剧本
+        {isRewriting ? '⏳ 改写中...' : '✨ 改写剧本'}
       </button>
 
       {/* Rewriter Trace (expandable) */}
@@ -649,11 +791,14 @@ function ShotAgentTracePanel({ scene, onClose, charMap }) {
 }
 
 // ─── STORYBOARD ──────────────────────────────────────────────────────────────
-function Storyboard({ selectedShotId, onSelectShot }) {
-  const scenes = demoData.storyboard[0].scenes
+function Storyboard({ selectedShotId, onSelectShot, animPhase, visibleSceneCount }) {
+  const allScenes = demoData.storyboard[0].scenes
+  const scenes = ['scenes', 'done'].includes(animPhase)
+    ? allScenes.slice(0, visibleSceneCount)
+    : []
   const [expanded, setExpanded] = useState(() => {
     const m = {}
-    scenes.forEach((s) => (m[s.id] = true))
+    allScenes.forEach((s) => (m[s.id] = true))
     return m
   })
   const [activeTab, setActiveTab] = useState('shot')
@@ -668,6 +813,18 @@ function Storyboard({ selectedShotId, onSelectShot }) {
 
   const charMap = {}
   demoData.story.characters.forEach((c) => (charMap[c.name] = c.color))
+
+  // Framework is ALWAYS on screen; only the data inside it streams in.
+  const hasScenes = scenes.length > 0
+  const isPlanning = ['director'].includes(animPhase)
+  // Status line shown in the Sub-Script header row while scenes have not arrived.
+  const subScriptStatus = {
+    empty: '点击右上角「📂 案例展示」加载《提灯人》演示 →',
+    typing_raw: '等待剧本输入…',
+    rewriting: '✨ Script Rewriter 改写剧本中…',
+    typing_synopsis: '✨ 改写完成，准备规划…',
+    director: '🎬 Director Agent 正在分析剧本、规划场景…',
+  }[animPhase]
 
   return (
     <div
@@ -764,36 +921,64 @@ function Storyboard({ selectedShotId, onSelectShot }) {
             <tr style={{ background: '#16100c', borderBottom: `1px solid ${COLORS.cardBorder}` }}>
               <td colSpan={11} className="px-3 py-1.5">
                 <span className="flex items-center gap-2">
-                  <span className="font-semibold text-xs" style={{ color: COLORS.accentLight }}>
-                    Sub-Script 1 &nbsp;·&nbsp; 4 Scenes
+                  <span className="font-semibold text-xs" style={{ color: hasScenes ? COLORS.accentLight : COLORS.textMuted }}>
+                    Sub-Script 1 &nbsp;·&nbsp; {hasScenes ? `${allScenes.length} Scenes` : '— Scenes'}
                   </span>
-                  <button
-                    onClick={() => setDirectorTraceOpen(!directorTraceOpen)}
-                    className="text-xs px-2 py-0.5 rounded font-mono"
-                    style={{
-                      background: directorTraceOpen ? `${COLORS.accentPurple}22` : 'transparent',
-                      color: directorTraceOpen ? COLORS.accentPurple : COLORS.textMuted,
-                      border: `1px solid ${directorTraceOpen ? `${COLORS.accentPurple}55` : COLORS.cardBorder}`,
-                    }}
-                  >
-                    Director Agent {directorTraceOpen ? '▼' : '▶'}
-                  </button>
+                  {hasScenes ? (
+                    <button
+                      onClick={() => setDirectorTraceOpen(!directorTraceOpen)}
+                      className="text-xs px-2 py-0.5 rounded font-mono"
+                      style={{
+                        background: directorTraceOpen ? `${COLORS.accentPurple}22` : 'transparent',
+                        color: directorTraceOpen ? COLORS.accentPurple : COLORS.textMuted,
+                        border: `1px solid ${directorTraceOpen ? `${COLORS.accentPurple}55` : COLORS.cardBorder}`,
+                      }}
+                    >
+                      Director Agent {directorTraceOpen ? '▼' : '▶'}
+                    </button>
+                  ) : (
+                    <span
+                      className="text-xs flex items-center gap-1.5"
+                      style={{ color: isPlanning ? COLORS.accentLight : COLORS.textMuted }}
+                    >
+                      {isPlanning && (
+                        <span className="flex gap-0.5">
+                          {[0, 1, 2].map((i) => (
+                            <span key={i} style={{
+                              display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%',
+                              background: COLORS.accentPurple,
+                              animation: `dotPulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                            }} />
+                          ))}
+                        </span>
+                      )}
+                      {subScriptStatus}
+                    </span>
+                  )}
                 </span>
               </td>
             </tr>
-            {directorTraceOpen && (
+            {directorTraceOpen && hasScenes && (
               <DirectorTracePanel
                 subScript={demoData.storyboard[0]}
                 onClose={() => setDirectorTraceOpen(false)}
               />
             )}
 
-            {scenes.map((scene) => (
-              <>
+            {/* Skeleton placeholder rows while scenes stream in */}
+            {!hasScenes && [0, 1, 2, 3].map((i) => <SkeletonShotRow key={`sk-${i}`} />)}
+
+            {scenes.map((scene, sceneIdx) => (
+              <Fragment key={`scene-frag-${scene.id}`}>
                 {/* Scene collapsible header */}
                 <tr
                   key={`scene-${scene.id}`}
-                  style={{ background: '#100d09', borderBottom: `1px solid ${COLORS.cardBorder}`, cursor: 'pointer' }}
+                  style={{
+                    background: '#100d09',
+                    borderBottom: `1px solid ${COLORS.cardBorder}`,
+                    cursor: 'pointer',
+                    animation: animPhase === 'scenes' ? `fadeSlideIn 0.35s ease forwards` : 'none',
+                  }}
                   onClick={() => toggleScene(scene.id)}
                 >
                   <td colSpan={11} className="px-3 py-1.5">
@@ -984,7 +1169,7 @@ function Storyboard({ selectedShotId, onSelectShot }) {
                     )
                   })
                 }
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -999,12 +1184,17 @@ function RightPanel({ shotId }) {
 
   // Flatten all shots
   const allShots = demoData.storyboard[0].scenes.flatMap((s) => s.shots)
-  const shot = allShots.find((s) => s.id === shotId) || allShots[0]
+  const shot = allShots.find((s) => s.id === shotId)
+  const hasShot = !!shot
 
   const charMap = {}
   demoData.story.characters.forEach((c) => (charMap[c.name] = c.color))
 
-  if (!shot) return null
+  const fieldStyle = {
+    background: COLORS.pageBg,
+    border: `1px solid ${COLORS.cardBorder}`,
+    color: COLORS.textSecondary,
+  }
 
   return (
     <div
@@ -1023,8 +1213,8 @@ function RightPanel({ shotId }) {
         <span className="text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
           Shot 编辑
         </span>
-        <span className="text-xs" style={{ color: COLORS.accentLight }}>
-          当前选中 Shot: {shot.number}
+        <span className="text-xs" style={{ color: hasShot ? COLORS.accentLight : COLORS.textMuted }}>
+          当前选中 Shot: {hasShot ? shot.number : '—'}
         </span>
       </div>
 
@@ -1036,17 +1226,16 @@ function RightPanel({ shotId }) {
           </div>
           <div
             className="rounded p-2 text-xs leading-relaxed"
-            style={{
-              background: COLORS.pageBg,
-              border: `1px solid ${COLORS.cardBorder}`,
-              color: COLORS.textSecondary,
-              minHeight: '80px',
-            }}
+            style={{ ...fieldStyle, minHeight: '80px' }}
           >
-            {shot.plot}
+            {hasShot ? shot.plot : (
+              <div className="flex flex-col gap-1.5 pt-0.5">
+                <SkeletonBar /><SkeletonBar w="92%" /><SkeletonBar w="80%" />
+              </div>
+            )}
           </div>
           <div className="text-right mt-0.5 text-xs" style={{ color: COLORS.textMuted }}>
-            {shot.plot.length} / 500
+            {hasShot ? shot.plot.length : 0} / 500
           </div>
         </div>
 
@@ -1056,9 +1245,11 @@ function RightPanel({ shotId }) {
             Involving Characters
           </div>
           <div className="flex flex-wrap gap-1">
-            {shot.characters.map((ch) => (
-              <CharacterPill key={ch} name={ch} color={charMap[ch] || COLORS.textMuted} />
-            ))}
+            {hasShot
+              ? shot.characters.map((ch) => (
+                  <CharacterPill key={ch} name={ch} color={charMap[ch] || COLORS.textMuted} />
+                ))
+              : <SkeletonBar w="52px" h={18} radius={999} />}
           </div>
         </div>
 
@@ -1067,15 +1258,8 @@ function RightPanel({ shotId }) {
           <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
             Shot Type
           </div>
-          <div
-            className="rounded px-2 py-1.5 text-xs"
-            style={{
-              background: COLORS.pageBg,
-              border: `1px solid ${COLORS.cardBorder}`,
-              color: COLORS.textSecondary,
-            }}
-          >
-            {shot.shotType}
+          <div className="rounded px-2 py-1.5 text-xs" style={fieldStyle}>
+            {hasShot ? shot.shotType : <SkeletonBar w="70%" />}
           </div>
         </div>
 
@@ -1084,15 +1268,8 @@ function RightPanel({ shotId }) {
           <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
             Camera Movement
           </div>
-          <div
-            className="rounded px-2 py-1.5 text-xs"
-            style={{
-              background: COLORS.pageBg,
-              border: `1px solid ${COLORS.cardBorder}`,
-              color: COLORS.textSecondary,
-            }}
-          >
-            {shot.cameraMovement}
+          <div className="rounded px-2 py-1.5 text-xs" style={fieldStyle}>
+            {hasShot ? shot.cameraMovement : <SkeletonBar w="60%" />}
           </div>
         </div>
 
@@ -1101,15 +1278,8 @@ function RightPanel({ shotId }) {
           <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
             旁白 / Dialogue
           </div>
-          <div
-            className="rounded px-2 py-1.5 text-xs"
-            style={{
-              background: COLORS.pageBg,
-              border: `1px solid ${COLORS.cardBorder}`,
-              color: COLORS.textSecondary,
-            }}
-          >
-            {shot.dialogue}
+          <div className="rounded px-2 py-1.5 text-xs" style={fieldStyle}>
+            {hasShot ? shot.dialogue : <SkeletonBar w="85%" />}
           </div>
         </div>
 
@@ -1137,20 +1307,28 @@ function RightPanel({ shotId }) {
           </div>
 
           {previewTab === 'kf' && (
-            <img
-              src={shot.keyframe}
-              alt="keyframe"
-              className="w-full rounded"
-              style={{ height: '180px', objectFit: 'cover', border: `1px solid ${COLORS.cardBorder}` }}
-            />
+            hasShot ? (
+              <img
+                src={shot.keyframe}
+                alt="keyframe"
+                className="w-full rounded"
+                style={{ height: '180px', objectFit: 'cover', border: `1px solid ${COLORS.cardBorder}` }}
+              />
+            ) : (
+              <SkeletonBar w="100%" h={180} radius={6} />
+            )
           )}
           {previewTab === 'video' && (
-            <video
-              src={shot.video}
-              controls
-              className="w-full rounded"
-              style={{ height: '180px', background: '#000', border: `1px solid ${COLORS.cardBorder}` }}
-            />
+            hasShot ? (
+              <video
+                src={shot.video}
+                controls
+                className="w-full rounded"
+                style={{ height: '180px', background: '#000', border: `1px solid ${COLORS.cardBorder}` }}
+              />
+            ) : (
+              <SkeletonBar w="100%" h={180} radius={6} />
+            )
           )}
           {previewTab === 'audio' && (
             <div
@@ -1217,15 +1395,36 @@ function RightPanel({ shotId }) {
 }
 
 // ─── BOTTOM: LOG CARD ─────────────────────────────────────────────────────────
-function LogCard() {
+function LogCard({ animPhase }) {
   const logRef = useRef(null)
   const logs = demoData.logs
+  const [visibleCount, setVisibleCount] = useState(0)
+
+  // Stream log lines in one by one once planning starts; show all when done.
+  useEffect(() => {
+    if (animPhase === 'empty' || animPhase === 'typing_raw') {
+      setVisibleCount(0)
+      return
+    }
+    if (animPhase === 'done') {
+      setVisibleCount(logs.length)
+      return
+    }
+    // Reveal progressively during rewriting → scenes.
+    const timer = setInterval(() => {
+      setVisibleCount((c) => {
+        if (c >= logs.length - 1) { clearInterval(timer); return c }
+        return c + 1
+      })
+    }, 280)
+    return () => clearInterval(timer)
+  }, [animPhase, logs.length])
 
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight
     }
-  }, [])
+  }, [visibleCount])
 
   const agentColor = (agent) => {
     if (agent === 'Director Agent') return COLORS.accentLight
@@ -1233,6 +1432,8 @@ function LogCard() {
     if (agent === 'Shot Agent') return COLORS.statusGreen
     return COLORS.textSecondary
   }
+
+  const shown = logs.slice(0, visibleCount)
 
   return (
     <div
@@ -1245,38 +1446,58 @@ function LogCard() {
       }}
     >
       <div
-        className="px-3 py-2 text-xs font-semibold flex-shrink-0"
+        className="px-3 py-2 text-xs font-semibold flex-shrink-0 flex items-center gap-2"
         style={{
           color: COLORS.textPrimary,
           borderBottom: `1px solid ${COLORS.cardBorder}`,
         }}
       >
         执行日志
+        {animPhase !== 'empty' && animPhase !== 'done' && (
+          <span className="flex gap-0.5">
+            {[0, 1, 2].map((i) => (
+              <span key={i} style={{
+                display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%',
+                background: COLORS.accentPurple,
+                animation: `dotPulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+              }} />
+            ))}
+          </span>
+        )}
       </div>
       <div
         ref={logRef}
         className="flex-1 overflow-y-auto p-2 space-y-1"
         style={{ maxHeight: '140px' }}
       >
-        {logs.map((log, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs">
-            <span className="font-mono flex-shrink-0" style={{ color: COLORS.textMuted }}>
-              {log.time}
-            </span>
-            <span className="flex-shrink-0 font-medium" style={{ color: agentColor(log.agent) }}>
-              [{log.agent}]
-            </span>
-            <span style={{ color: COLORS.textSecondary }}>{log.msg}</span>
+        {shown.length === 0 ? (
+          <div className="text-xs h-full flex items-center justify-center" style={{ color: COLORS.textMuted }}>
+            等待任务开始…
           </div>
-        ))}
+        ) : (
+          shown.map((log, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs" style={{ animation: 'fadeSlideIn 0.3s ease' }}>
+              <span className="font-mono flex-shrink-0" style={{ color: COLORS.textMuted }}>
+                {log.time}
+              </span>
+              <span className="flex-shrink-0 font-medium" style={{ color: agentColor(log.agent) }}>
+                [{log.agent}]
+              </span>
+              <span style={{ color: COLORS.textSecondary }}>{log.msg}</span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
 }
 
 // ─── BOTTOM: TASK INFO CARD ───────────────────────────────────────────────────
-function TaskInfoCard() {
+function TaskInfoCard({ animPhase, progress }) {
   const { task } = demoData
+  const isDone = animPhase === 'done'
+  const isEmpty = animPhase === 'empty'
+  const statusText = isDone ? 'done' : isEmpty ? '未开始' : '进行中'
   return (
     <div
       className="flex flex-col rounded-lg overflow-hidden"
@@ -1299,31 +1520,35 @@ function TaskInfoCard() {
       <div className="p-3 flex flex-col gap-2 text-xs">
         <div className="flex items-center justify-between">
           <span style={{ color: COLORS.textMuted }}>状态</span>
-          <StatusBadge status="done" />
+          <StatusBadge status={statusText} />
         </div>
         {/* Progress bar */}
         <div>
           <div className="flex justify-between mb-1">
             <span style={{ color: COLORS.textMuted }}>进度</span>
-            <span style={{ color: COLORS.statusGreen }}>100%</span>
+            <span style={{ color: isDone ? COLORS.statusGreen : COLORS.accentLight }}>{progress}%</span>
           </div>
           <div className="rounded-full overflow-hidden" style={{ height: '6px', background: COLORS.cardBorder }}>
             <div
               className="h-full rounded-full"
-              style={{ width: '100%', background: COLORS.statusGreen }}
+              style={{
+                width: `${progress}%`,
+                background: isDone ? COLORS.statusGreen : COLORS.accentPurple,
+                transition: 'width 0.4s ease',
+              }}
             />
           </div>
         </div>
         <div className="flex justify-between">
           <span style={{ color: COLORS.textMuted }}>开始时间</span>
           <span className="font-mono" style={{ color: COLORS.textSecondary }}>
-            {task.created_at}
+            {isEmpty ? '—' : task.created_at}
           </span>
         </div>
         <div className="flex justify-between">
           <span style={{ color: COLORS.textMuted }}>更新时间</span>
           <span className="font-mono" style={{ color: COLORS.textSecondary }}>
-            {task.finished_at}
+            {isDone ? task.finished_at : '—'}
           </span>
         </div>
         <div className="flex justify-between">
@@ -1338,8 +1563,10 @@ function TaskInfoCard() {
 }
 
 // ─── BOTTOM: COST CARD ───────────────────────────────────────────────────────
-function CostCard() {
+function CostCard({ progress = 100 }) {
   const { cost } = demoData
+  const frac = Math.max(0, Math.min(1, progress / 100))
+  const scale = (n) => Math.round(n * frac)
   return (
     <div
       className="flex flex-col rounded-lg overflow-hidden"
@@ -1363,9 +1590,9 @@ function CostCard() {
         {/* Token metrics */}
         <div className="grid grid-cols-3 gap-1">
           {[
-            { label: '输入 Tokens', value: cost.input_tokens.toLocaleString() },
-            { label: '输出 Tokens', value: cost.output_tokens.toLocaleString() },
-            { label: '总计', value: cost.total_tokens.toLocaleString() },
+            { label: '输入 Tokens', value: scale(cost.input_tokens).toLocaleString() },
+            { label: '输出 Tokens', value: scale(cost.output_tokens).toLocaleString() },
+            { label: '总计', value: scale(cost.total_tokens).toLocaleString() },
           ].map((m) => (
             <div
               key={m.label}
@@ -1388,7 +1615,7 @@ function CostCard() {
         >
           <span style={{ color: COLORS.textMuted }}>💰 预估费用 (USD)</span>
           <span className="font-bold" style={{ color: '#fbbf24' }}>
-            ${cost.estimated_cost_usd.toFixed(4)}
+            ${(cost.estimated_cost_usd * frac).toFixed(4)}
           </span>
         </div>
         {/* Model */}
@@ -1404,7 +1631,8 @@ function CostCard() {
 }
 
 // ─── BOTTOM: FINAL FILM CARD ──────────────────────────────────────────────────
-function FinalFilmCard({ onOpenModal }) {
+function FinalFilmCard({ onOpenModal, animPhase }) {
+  const isDone = animPhase === 'done'
   return (
     <div
       className="flex flex-col rounded-lg overflow-hidden"
@@ -1425,31 +1653,35 @@ function FinalFilmCard({ onOpenModal }) {
         成片生成
       </div>
       <div className="p-3 flex flex-col gap-2 text-xs flex-1">
-        <div style={{ color: COLORS.textSecondary }}>
-          《提灯人》完整成片，时长 40.36s，8 镜头
+        <div style={{ color: isDone ? COLORS.textSecondary : COLORS.textMuted }}>
+          {isDone ? '《提灯人》完整成片，时长 40.36s，8 镜头' : '成片将在所有镜头生成后合成…'}
         </div>
         <button
-          onClick={onOpenModal}
+          onClick={isDone ? onOpenModal : undefined}
+          disabled={!isDone}
           className="w-full py-2 rounded text-sm font-semibold"
           style={{
-            background: COLORS.accentPurple,
-            color: '#1a1410',
-            boxShadow: '0 2px 14px rgba(245,158,11,0.35)',
+            background: isDone ? COLORS.accentPurple : COLORS.cardBorder,
+            color: isDone ? '#1a1410' : COLORS.textMuted,
+            boxShadow: isDone ? '0 2px 14px rgba(245,158,11,0.35)' : 'none',
+            cursor: isDone ? 'pointer' : 'not-allowed',
           }}
         >
-          ▶ 播放成片
+          {isDone ? '▶ 播放成片' : '⏳ 等待生成'}
         </button>
         <div style={{ color: COLORS.textMuted }} className="flex items-center gap-1">
           <span>⏱</span>
-          <span>40.36 秒 | 8 镜头 720p</span>
+          <span>{isDone ? '40.36 秒 | 8 镜头 720p' : '— 秒 | — 镜头'}</span>
         </div>
-        <button
-          onClick={demoAlert}
-          className="text-xs"
-          style={{ color: COLORS.accentLight, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
-        >
-          查看详情 ›
-        </button>
+        {isDone && (
+          <button
+            onClick={demoAlert}
+            className="text-xs"
+            style={{ color: COLORS.accentLight, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+          >
+            查看详情 ›
+          </button>
+        )}
       </div>
     </div>
   )
@@ -1585,8 +1817,98 @@ function TechShowcase() {
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   const allShots = demoData.storyboard[0].scenes.flatMap((s) => s.shots)
-  const [selectedShotId, setSelectedShotId] = useState(allShots[0]?.id || '')
+  const [selectedShotId, setSelectedShotId] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+
+  // Animation state
+  const [animPhase, setAnimPhase] = useState('empty')
+  const [rawTyped, setRawTyped] = useState('')
+  const [synopsisTyped, setSynopsisTyped] = useState('')
+  const [visibleSceneCount, setVisibleSceneCount] = useState(0)
+  const timersRef = useRef([])
+
+  const clearAllTimers = () => {
+    timersRef.current.forEach((t) => clearInterval(t))
+    timersRef.current = []
+  }
+
+  const startDemo = useCallback(() => {
+    clearAllTimers()
+    setAnimPhase('typing_raw')
+    setRawTyped('')
+    setSynopsisTyped('')
+    setVisibleSceneCount(0)
+    setSelectedShotId('')
+
+    const RAW = demoData.story.raw_synopsis
+    const SYN = demoData.story.synopsis
+    const SCENE_COUNT = demoData.storyboard[0].scenes.length
+
+    let i = 0
+    const rawTimer = setInterval(() => {
+      i++
+      setRawTyped(RAW.slice(0, i))
+      if (i >= RAW.length) {
+        clearInterval(rawTimer)
+        // Pause → rewriting
+        const t1 = setTimeout(() => {
+          setAnimPhase('rewriting')
+          // Rewriting delay → start typing synopsis
+          const t2 = setTimeout(() => {
+            setAnimPhase('typing_synopsis')
+            let j = 0
+            const synTimer = setInterval(() => {
+              j++
+              setSynopsisTyped(SYN.slice(0, j))
+              if (j >= SYN.length) {
+                clearInterval(synTimer)
+                // Done typing → director phase
+                const t3 = setTimeout(() => {
+                  setAnimPhase('director')
+                  // Director thinking → reveal scenes
+                  const t4 = setTimeout(() => {
+                    setAnimPhase('scenes')
+                    let s = 0
+                    const sceneTimer = setInterval(() => {
+                      s++
+                      setVisibleSceneCount(s)
+                      if (s >= SCENE_COUNT) {
+                        clearInterval(sceneTimer)
+                        const t5 = setTimeout(() => {
+                          setAnimPhase('done')
+                          setSelectedShotId(allShots[0]?.id || '')
+                        }, 400)
+                        timersRef.current.push(t5)
+                      }
+                    }, 380)
+                    timersRef.current.push(sceneTimer)
+                  }, 1300)
+                  timersRef.current.push(t4)
+                }, 600)
+                timersRef.current.push(t3)
+              }
+            }, 10)
+            timersRef.current.push(synTimer)
+          }, 1900)
+          timersRef.current.push(t2)
+        }, 700)
+        timersRef.current.push(t1)
+      }
+    }, 14)
+    timersRef.current.push(rawTimer)
+  }, [allShots])
+
+  const resetDemo = () => {
+    clearAllTimers()
+    setAnimPhase('empty')
+    setRawTyped('')
+    setSynopsisTyped('')
+    setVisibleSceneCount(0)
+    setSelectedShotId('')
+  }
+
+  const sceneTotal = demoData.storyboard[0].scenes.length
+  const progress = phaseProgress(animPhase, visibleSceneCount, sceneTotal)
 
   return (
     <div
@@ -1598,26 +1920,41 @@ export default function App() {
         overflowX: 'hidden',
       }}
     >
-      {/* Fixed-height viewport section */}
-      <div
-        className="flex flex-col"
-        style={{ height: '100vh', overflow: 'hidden' }}
-      >
-        {/* Top bar */}
-        <TopBar />
+      {/* CSS animations */}
+      <style>{`
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+        @keyframes dotPulse { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+        @keyframes fadeSlideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes magShimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+        .mag-skeleton {
+          background: linear-gradient(90deg, ${COLORS.cardBorder}55 25%, ${COLORS.textMuted}44 37%, ${COLORS.cardBorder}55 63%);
+          background-size: 200% 100%;
+          animation: magShimmer 1.4s ease-in-out infinite;
+        }
+      `}</style>
 
-        {/* Main 3-column area — flex-1, overflow hidden */}
+      {/* Fixed-height viewport section */}
+      <div className="flex flex-col" style={{ height: '100vh', overflow: 'hidden' }}>
+        {/* Top bar */}
+        <TopBar animPhase={animPhase} onStartDemo={startDemo} onReset={resetDemo} />
+
+        {/* Main 3-column area — the framework is always on screen */}
         <div className="flex flex-1 overflow-hidden">
-          <LeftPanel />
+          <LeftPanel animPhase={animPhase} rawTyped={rawTyped} synopsisTyped={synopsisTyped} />
 
           {/* Center storyboard */}
-          <Storyboard selectedShotId={selectedShotId} onSelectShot={setSelectedShotId} />
+          <Storyboard
+            selectedShotId={selectedShotId}
+            onSelectShot={setSelectedShotId}
+            animPhase={animPhase}
+            visibleSceneCount={visibleSceneCount}
+          />
 
-          {/* Right detail panel */}
+          {/* Right detail panel — always present, fields fill in when a shot exists */}
           <RightPanel shotId={selectedShotId} />
         </div>
 
-        {/* Bottom row */}
+        {/* Bottom row — always present, data streams in */}
         <div
           className="flex gap-3 p-3 flex-shrink-0"
           style={{
@@ -1625,15 +1962,15 @@ export default function App() {
             borderTop: `1px solid ${COLORS.cardBorder}`,
           }}
         >
-          <LogCard />
-          <TaskInfoCard />
-          <CostCard />
-          <FinalFilmCard onOpenModal={() => setModalOpen(true)} />
+          <LogCard animPhase={animPhase} />
+          <TaskInfoCard animPhase={animPhase} progress={progress} />
+          <CostCard progress={progress} />
+          <FinalFilmCard onOpenModal={() => setModalOpen(true)} animPhase={animPhase} />
         </div>
       </div>
 
-      {/* Tech showcase — below the viewport, scroll to see */}
-      <TechShowcase />
+      {/* Tech showcase */}
+      {animPhase === 'done' && <TechShowcase />}
 
       {/* Modal */}
       <VideoModal open={modalOpen} onClose={() => setModalOpen(false)} />
