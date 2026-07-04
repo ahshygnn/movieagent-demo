@@ -4,9 +4,23 @@
 """
 import time
 import base64
+import contextlib
 import os
 import requests
 import config
+
+
+@contextlib.contextmanager
+def _no_proxy():
+    """临时移除代理环境变量，让火山方舟请求直连，用完后还原。"""
+    keys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]
+    saved = {k: os.environ.pop(k, None) for k in keys}
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is not None:
+                os.environ[k] = v
 
 # 加在 prompt 前，降低安全过滤误触发概率
 _SAFE_PREFIX = "Family-friendly animated film scene, Disney/Pixar style, safe for all ages. "
@@ -88,7 +102,8 @@ def generate_keyframe(shot_plot: str, shot_id: str,
     last_err = None
     for i, (prompt, images) in enumerate(attempts):
         try:
-            image_url = _call_api(prompt, images, size=size)
+            with _no_proxy():
+                image_url = _call_api(prompt, images, size=size)
             break
         except Exception as e:
             last_err = e
@@ -112,7 +127,8 @@ def generate_keyframe(shot_plot: str, shot_id: str,
     last_dl_err = None
     for dl_attempt in range(3):
         try:
-            img_resp = requests.get(image_url, timeout=120, stream=True)
+            with _no_proxy():
+                img_resp = requests.get(image_url, timeout=120, stream=True)
             img_resp.raise_for_status()
             with open(local_path, "wb") as f:
                 for chunk in img_resp.iter_content(chunk_size=1024 * 256):

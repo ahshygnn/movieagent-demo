@@ -1,0 +1,1642 @@
+import { useState, useRef, useEffect } from 'react'
+import demoData from './data/demo_data.json'
+
+const COLORS = {
+  pageBg: '#120e0a',
+  cardBg: '#1a1410',
+  cardBorder: '#2d2018',
+  accentPurple: '#f59e0b',
+  accentLight: '#fbbf24',
+  statusGreen: '#22c55e',
+  textPrimary: '#ede8e0',
+  textSecondary: '#a89b8c',
+  textMuted: '#5c5048',
+}
+
+const demoAlert = () =>
+  window.alert('该功能在完整版中支持实时生成，当前为已完成示例任务的展示。')
+
+// Real agent system prompts from agents/shot.py and agents/scene.py
+const SHOT_PROMPT = `You are a professional movie director. Your task is to transform the provided scene details into a well-structured shot list that effectively captures the emotions, plot, and visual storytelling. Follow the structured reasoning process below before generating the final output.
+
+-------------------------------
+Step 1: Internal Chain-of-Thought
+-------------------------------
+[INTERNAL INSTRUCTIONS:
+Before generating the final output, perform structured reasoning to ensure logical and high-quality shot composition. Follow these steps:
+
+1. **Break Down Scene into Key Shots**
+   - Identify the essential moments in the scene that require distinct shots.
+   - Ensure that each shot serves a clear narrative or emotional purpose.
+   - Determine logical transitions between shots to maintain visual continuity.
+
+2. **Define Shot Composition and Framing**
+   - Select the appropriate shot type (e.g., close-up for emotion, wide shot for setting).
+   - Ensure framing adheres to cinematic principles (e.g., rule of thirds, leading lines).
+   - Identify the key objects and characters that must be visible in the frame.
+
+3. **Determine Character Positioning & Bounding Boxes**
+   - Place characters using normalized bounding boxes, ensuring proper distribution in the frame.
+   - Ensure that bounding boxes do not exceed an interpolation of 0.5.
+   - Make the bounding boxes as large as possible to focus on key characters.
+   - Bounding boxes must not intersect or overlap.
+
+4. **Enhance Emotional Impact**
+   - Identify the dominant emotion for each shot (e.g., fear, sadness, triumph).
+   - Adjust lighting, depth of field, and contrast to reinforce the emotional tone.
+
+5. **Refine Camera Techniques and Movements**
+   - Specify camera movements (e.g., static shot for tension, dolly-in for intimacy).
+   - Adjust angles dynamically to maintain narrative engagement.
+
+6. **Ensure Dialogue Accuracy**
+   - Extract relevant dialogue for each shot, ensuring proper pacing.
+   - All dialogue in \`Dialogue\` must be written in Simplified Chinese.]
+
+-------------------------------
+Step 2: Final Output
+-------------------------------
+Output your final result in JSON format with keys: "Internal Chain-of-Thought" and "Shot".`
+
+const DIRECTOR_PROMPT = `You are a movie screenwriter. Your overall task is to transform a given script synopsis into a detailed sub-script, dividing it step by step.
+
+-------------------------------
+Step 1: Internal Chain-of-Thought
+-------------------------------
+1. Identify Core Narrative Structure — acts, plot beats, turning points, scene transitions.
+2. Extract Key Character Information — major/supporting characters, relationships.
+3. Define Temporal Segmentation — explicit/implicit timeline cues.
+4. Validate Sub-Script Breakdown — each sub-script ≥50 words, total ≤20 sub-scripts.
+5. Justify the Division — reasoning behind each segmentation boundary.
+
+-------------------------------
+Step 2: Final Output
+-------------------------------
+Output in JSON format:
+{
+  "Relationships": { "Character1 - Character2": "relationship" },
+  "Internal Chain-of-Thought": { "Core Narrative Structure": "...", ... },
+  "Sub-Script": {
+    "Sub-Script 1": { "Plot": "...", "Involving Characters": [...], "Timeline": "...", "Reason for Division": "..." }
+  }
+}`
+
+const SCRIPT_REWRITER_PROMPT = `你是一位专业的动画剧本改编师，擅长把零散、扁平的故事素材重组为适合分镜规划的叙事文本。
+
+你的任务：将用户提供的原始故事输入，改写为一段叙事结构丰富的连续段落，使其更适合后续的导演分镜规划。
+
+改写时需在以下三个维度上增强：
+1. 叙事弧度：把并列的、孤立的动作描述，重组为有因果关系和情绪起伏的连贯叙事。
+2. 角色塑造：为出场角色补充简洁的性格或身份标签，使不同角色具有辨识度。
+3. 情绪与场景：适度补充环境描写和情绪渲染，增强画面感和感官细节。
+
+约束：不得添加原文中不存在的核心情节、人物或结局。只输出改写后的段落正文，不要输出前言或解释。`
+
+const SCENE_PROMPT = `You are a movie director and script planner. Your overall task is to transform a given movie script synopsis into well-defined key scenes, ensuring a structured and cinematic breakdown.
+
+-------------------------------
+Step 1: Internal Chain-of-Thought
+-------------------------------
+[INTERNAL INSTRUCTIONS:
+1. **Analyze the Narrative Structure** — Identify core acts, turning points, scene boundaries.
+2. **Extract Key Scene Elements** — List characters, roles, events, conflicts, emotional beats.
+3. **Define Scene Boundaries** — Natural breaks (location shifts, time jumps, emotional climaxes).
+4. **Enhance Cinematic Elements** — Scene Description, Emotional Tone, Visual Style, Key Props, Music & Sound Effects, Cinematography Notes.]
+
+-------------------------------
+Step 2: Final Output
+-------------------------------
+Output a structured scene breakdown in JSON format. Each scene must include:
+Involving Characters, Plot, Scene Description, Emotional Tone, Visual Style, Key Props, Music and Sound Effects, Cinematography Notes.`
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+const StatusBadge = ({ status }) => {
+  const done = status === 'done'
+  return (
+    <span
+      style={{
+        background: done ? 'rgba(34,197,94,0.15)' : 'rgba(148,163,184,0.12)',
+        color: done ? COLORS.statusGreen : COLORS.textSecondary,
+        border: `1px solid ${done ? 'rgba(34,197,94,0.3)' : COLORS.cardBorder}`,
+      }}
+      className="text-xs px-2 py-0.5 rounded-full font-medium"
+    >
+      {done ? '已完成' : status}
+    </span>
+  )
+}
+
+const CharacterPill = ({ name, color }) => (
+  <span
+    style={{
+      background: `${color}22`,
+      color: color,
+      border: `1px solid ${color}55`,
+    }}
+    className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+  >
+    {name}
+  </span>
+)
+
+// ─── TOP BAR ─────────────────────────────────────────────────────────────────
+function TopBar() {
+  return (
+    <div
+      className="flex items-center px-4 gap-4 flex-shrink-0"
+      style={{
+        height: '48px',
+        background: COLORS.cardBg,
+        borderBottom: `1px solid ${COLORS.cardBorder}`,
+      }}
+    >
+      <span className="font-bold text-base" style={{ color: COLORS.textPrimary }}>
+        🎬 MovieAgent Demo
+      </span>
+      <span style={{ color: COLORS.textMuted }} className="text-xs">
+        TaskID:&nbsp;
+        <span style={{ color: COLORS.textSecondary }} className="font-mono">
+          f6731663
+        </span>
+      </span>
+      <span className="flex items-center gap-1 text-xs" style={{ color: COLORS.statusGreen }}>
+        <span className="inline-block w-2 h-2 rounded-full" style={{ background: COLORS.statusGreen }} />
+        已完成 100%
+      </span>
+      <div className="flex-1" />
+      <button
+        onClick={demoAlert}
+        className="text-xs px-3 py-1 rounded"
+        style={{
+          border: `1px solid ${COLORS.cardBorder}`,
+          color: COLORS.textSecondary,
+          background: 'transparent',
+        }}
+      >
+        刷新
+      </button>
+    </div>
+  )
+}
+
+// ─── LEFT PANEL ──────────────────────────────────────────────────────────────
+function LeftPanel() {
+  const { synopsis, raw_synopsis, characters } = demoData.story
+
+  const initials = (name) => name.slice(0, 1)
+
+  return (
+    <div
+      className="flex flex-col gap-3 p-3 overflow-y-auto flex-shrink-0"
+      style={{
+        width: '288px',
+        background: COLORS.cardBg,
+        borderRight: `1px solid ${COLORS.cardBorder}`,
+      }}
+    >
+      {/* Title */}
+      <div className="flex items-center gap-2">
+        <span>📋</span>
+        <span className="font-semibold text-sm" style={{ color: COLORS.textPrimary }}>
+          项目输入
+        </span>
+      </div>
+
+      {/* Script Rewriter */}
+      <ScriptRewriterPanel rawSynopsis={raw_synopsis} rewrittenSynopsis={synopsis} />
+
+      {/* Rewritten Synopsis */}
+      <div>
+        <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
+          改写后剧本 / Rewritten Synopsis
+        </div>
+        <div
+          className="text-xs leading-relaxed overflow-y-auto rounded p-2"
+          style={{
+            color: COLORS.textSecondary,
+            maxHeight: '160px',
+            background: COLORS.pageBg,
+            border: `1px solid ${COLORS.cardBorder}`,
+          }}
+        >
+          {synopsis}
+        </div>
+      </div>
+
+      {/* Characters */}
+      <div>
+        <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
+          角色（Characters）
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {characters.map((c) => (
+            <CharacterPill key={c.name} name={c.name} color={c.color} />
+          ))}
+        </div>
+      </div>
+
+      {/* Character reference images */}
+      <div>
+        <div className="text-xs font-medium mb-2" style={{ color: COLORS.textMuted }}>
+          角色参考图
+        </div>
+        <div className="flex gap-2">
+          {characters.map((c) => (
+            <div key={c.name} className="flex flex-col items-center gap-1">
+              <div
+                className="w-14 h-14 rounded-lg flex items-center justify-center text-lg font-bold"
+                style={{
+                  background: `${c.color}22`,
+                  border: `1px solid ${c.color}55`,
+                  color: c.color,
+                }}
+              >
+                {initials(c.name)}
+              </div>
+              <span className="text-xs" style={{ color: COLORS.textMuted }}>
+                {c.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1" />
+
+      {/* CTA button */}
+      <button
+        onClick={demoAlert}
+        disabled
+        className="w-full py-2 rounded text-sm font-medium cursor-not-allowed opacity-60"
+        style={{
+          background: COLORS.accentPurple,
+          color: '#fff',
+          boxShadow: '0 2px 12px rgba(245,158,11,0.25)',
+        }}
+      >
+        ✨ 开始规划 / 生成 🎬
+      </button>
+    </div>
+  )
+}
+
+// ─── SCRIPT REWRITER PANEL ───────────────────────────────────────────────────
+function ScriptRewriterPanel({ rawSynopsis, rewrittenSynopsis }) {
+  const [open, setOpen] = useState(false)
+  const [section, setSection] = useState('output')
+
+  const thinkText = `[Script Rewriter Thinking]\n\n→ 分析原始输入的叙事结构平铺问题\n→ 识别核心情节点与角色关系\n→ 规划叙事弧度：铺垫 → 冲突 → 高潮 → 悬念收尾\n→ 为角色补充性格标签与身份辨识度\n→ 增强环境描写与情绪渲染\n→ 检验：未添加原文不存在的情节或角色\n\n（完整版将展示模型真实输出的 Chain-of-Thought）`
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Header with toggle */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium" style={{ color: COLORS.textMuted }}>原始输入 / Raw Input</span>
+        <button
+          onClick={() => setOpen(!open)}
+          className="text-xs px-2 py-0.5 rounded font-mono"
+          style={{
+            background: open ? `${COLORS.accentPurple}22` : 'transparent',
+            color: open ? COLORS.accentLight : COLORS.textMuted,
+            border: `1px solid ${open ? `${COLORS.accentPurple}55` : COLORS.cardBorder}`,
+          }}
+        >
+          Script Rewriter {open ? '▼' : '▶'}
+        </button>
+      </div>
+
+      {/* Raw input textarea */}
+      <textarea
+        defaultValue={rawSynopsis}
+        rows={4}
+        className="w-full text-xs rounded p-2"
+        style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textSecondary, resize: 'vertical', outline: 'none' }}
+      />
+
+      {/* Rewrite button */}
+      <button
+        onClick={demoAlert}
+        className="w-full text-xs py-1.5 rounded font-medium"
+        style={{
+          background: COLORS.accentPurple,
+          color: '#1a1410',
+          border: 'none',
+          boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
+          cursor: 'pointer',
+        }}
+      >
+        ✨ 改写剧本
+      </button>
+
+      {/* Rewriter Trace (expandable) */}
+      {open && (
+        <div className="rounded" style={{ border: `1px solid ${COLORS.accentPurple}44`, background: COLORS.pageBg }}>
+          <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}>
+            <span className="text-xs font-semibold font-mono" style={{ color: COLORS.accentLight }}>Script Rewriter Trace</span>
+            <div className="flex gap-1">
+              {[{ k: 'output', l: 'Output' }, { k: 'prompt', l: 'Prompt' }, { k: 'thinking', l: 'Thinking' }].map(({ k, l }) => (
+                <button key={k} onClick={() => setSection(k)} className="text-xs px-2 py-0.5 rounded"
+                  style={{
+                    background: section === k ? COLORS.accentPurple : 'transparent',
+                    color: section === k ? '#1a1410' : COLORS.textSecondary,
+                    border: `1px solid ${section === k ? COLORS.accentPurple : COLORS.cardBorder}`,
+                  }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <button onClick={demoAlert} className="text-xs px-2 py-0.5 rounded"
+              style={{ background: `${COLORS.accentPurple}22`, color: COLORS.accentLight, border: `1px solid ${COLORS.accentPurple}44` }}>
+              ↺ 重新改写
+            </button>
+          </div>
+          <div className="p-3">
+            {section === 'prompt' && (
+              <textarea defaultValue={`[System Prompt — Script Rewriter]\n\n${SCRIPT_REWRITER_PROMPT}\n\n---\n[User Query]\n\n现在，请改写以下输入，只输出改写后的段落正文：\n\n【原始输入】\n${rawSynopsis}\n\n【改写输出】`}
+                rows={8} className="w-full text-xs font-mono rounded p-2"
+                style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, resize: 'vertical', outline: 'none', boxSizing: 'border-box', width: '100%' }} />
+            )}
+            {section === 'thinking' && (
+              <pre className="text-xs font-mono rounded p-2 m-0"
+                style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, whiteSpace: 'pre-wrap' }}>
+                {thinkText}
+              </pre>
+            )}
+            {section === 'output' && (
+              <div className="text-xs rounded p-2 leading-relaxed"
+                style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textSecondary }}>
+                {rewrittenSynopsis}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── DIRECTOR TRACE PANEL ─────────────────────────────────────────────────────
+function DirectorTracePanel({ subScript, onClose }) {
+  const [section, setSection] = useState('output')
+
+  const thinkText = `[Internal Chain-of-Thought — Director Agent]\n\nCore Narrative Structure:\n→ 识别故事主线弧度：铺垫（点灯日常）→ 转折（引路鹿降临）→ 冲突（泉水干涸）→ 顿悟（光在提灯人手中）\n→ 主要情绪节拍：日常→危机→探索→绝望→顿悟→光明\n\nKey Character Information:\n→ 小满（提灯女孩）—— 主角，行动者\n→ 引路鹿 —— 催化剂角色\n→ 山谷老人 —— 智慧传递者\n\nTemporal Segmentation:\n→ 黄昏：日常点灯场景（铺垫）\n→ 夜间：引路鹿闯入，老人揭示传说\n→ 夜间至黎明：上山寻泉，历经黑暗\n→ 山顶：顿悟时刻，分光救鹿，山谷重亮\n\nSub-Script Division Justification:\n→ 故事总体简短，叙事连贯，适合作为单一 Sub-Script 完整处理\n→ 保留所有角色关系与情节完整性\n\n（完整版将展示模型真实输出的 Chain-of-Thought）`
+
+  return (
+    <tr>
+      <td colSpan={11} style={{ padding: 0, background: '#0c0a07', borderBottom: `2px solid ${COLORS.accentPurple}33` }}>
+        <div style={{ padding: '10px 12px 14px', borderLeft: `3px solid ${COLORS.accentPurple}88` }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-semibold font-mono" style={{ color: COLORS.accentPurple }}>Director Agent Trace</span>
+            <span className="text-xs font-mono px-1.5 py-0.5 rounded"
+              style={{ background: `${COLORS.accentPurple}22`, color: COLORS.accentPurple, border: `1px solid ${COLORS.accentPurple}44` }}>
+              {subScript.sub_script}
+            </span>
+            <div className="flex gap-1">
+              {[{ k: 'output', l: 'Output' }, { k: 'prompt', l: 'Prompt' }, { k: 'thinking', l: 'Thinking' }].map(({ k, l }) => (
+                <button key={k} onClick={() => setSection(k)} className="text-xs px-2 py-0.5 rounded"
+                  style={{
+                    background: section === k ? COLORS.accentPurple : 'transparent',
+                    color: section === k ? '#1a1410' : COLORS.textSecondary,
+                    border: `1px solid ${section === k ? COLORS.accentPurple : COLORS.cardBorder}`,
+                  }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <button onClick={demoAlert} className="text-xs px-2 py-1 rounded"
+              style={{ background: `${COLORS.accentPurple}22`, color: COLORS.accentPurple, border: `1px solid ${COLORS.accentPurple}44` }}>
+              ↺ 重新规划
+            </button>
+            <button onClick={onClose} className="text-xs px-2 py-1 rounded"
+              style={{ color: COLORS.textMuted, border: `1px solid ${COLORS.cardBorder}`, background: 'transparent' }}>
+              收起 ▲
+            </button>
+          </div>
+
+          {section === 'prompt' && (
+            <textarea defaultValue={`[System Prompt — Director Agent]\n\n${DIRECTOR_PROMPT}\n\n---\n[User Query]\n\nScript Synopsis: "${subScript.sub_script_plot}"\nCharacters: [小满, 引路鹿, 山谷老人]`}
+              rows={8} className="w-full text-xs font-mono rounded p-2"
+              style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, resize: 'vertical', outline: 'none', boxSizing: 'border-box', width: '100%' }} />
+          )}
+          {section === 'thinking' && (
+            <pre className="text-xs font-mono rounded p-2 m-0"
+              style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, whiteSpace: 'pre-wrap' }}>
+              {thinkText}
+            </pre>
+          )}
+          {section === 'output' && (
+            <div className="rounded p-3" style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="font-semibold text-xs mb-2" style={{ color: COLORS.accentPurple }}>
+                Director Agent Output — {subScript.sub_script}
+              </div>
+              <div className="text-xs leading-relaxed mb-2" style={{ color: COLORS.textSecondary }}>
+                {subScript.sub_script_plot}
+              </div>
+              <div className="flex gap-4 text-xs mt-2" style={{ color: COLORS.textMuted }}>
+                <span>场景数：{subScript.scenes?.length ?? 4}</span>
+                <span>·</span>
+                <span>时间线：黄昏 → 深夜 → 山顶黎明</span>
+                <span>·</span>
+                <span>分割理由：故事完整弧度，单 Sub-Script 处理</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ─── SCENE TRACE PANEL ───────────────────────────────────────────────────────
+function SceneTracePanel({ scene, onClose }) {
+  const [section, setSection] = useState('output')
+
+  const thinkText = `[Internal Chain-of-Thought — Scene Agent — ${scene.scene}]\n\nAnalyze Narrative Structure:\n→ 识别本场景在整体叙事弧中的位置与功能\n→ 确认情感基调转折点与关键戏剧事件\n\nExtract Key Scene Elements:\n→ 场景角色：${scene.shots.flatMap(s => s.characters).filter((v, i, a) => a.indexOf(v) === i).join('、')}\n→ 核心戏剧冲突与情感节拍定位\n\nDefine Scene Boundaries:\n→ 与上一场景的过渡方式（地点/时间/情绪切换）\n→ 本场景自然结束点的判断依据\n\nShot Planning Result:\n→ 规划分镜数量：${scene.shots.length} Shots\n→ 景别分布、角色出场顺序已确认\n\n（完整版将展示模型真实输出的 Chain-of-Thought）`
+
+  const queryText = `[User Query — Scene Agent]\n\nScript Synopsis (Sub-Script 1 excerpt):\n"${scene.shots[0]?.plot?.slice(0, 120) ?? ''}..."\n\nCharacter Relationships: { provided by Director Agent }\n\nTask: Break this scene into a structured shot list with cinematic details.`
+
+  return (
+    <tr>
+      <td colSpan={11} style={{ padding: 0, background: '#0e0b08', borderBottom: `2px solid #fbbf2433` }}>
+        <div style={{ padding: '10px 12px 14px', borderLeft: `3px solid #fbbf24` }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-semibold font-mono" style={{ color: '#fbbf24' }}>Scene Agent Trace</span>
+            <span className="text-xs font-mono px-1.5 py-0.5 rounded"
+              style={{ background: '#fbbf2422', color: '#fbbf24', border: '1px solid #fbbf2444' }}>
+              {scene.scene} · {scene.shots.length} Shots planned
+            </span>
+            <div className="flex gap-1">
+              {[{ k: 'output', l: 'Output' }, { k: 'prompt', l: 'Prompt' }, { k: 'thinking', l: 'Thinking' }].map(({ k, l }) => (
+                <button key={k} onClick={() => setSection(k)} className="text-xs px-2 py-0.5 rounded"
+                  style={{
+                    background: section === k ? '#fbbf24' : 'transparent',
+                    color: section === k ? '#1a1410' : COLORS.textSecondary,
+                    border: `1px solid ${section === k ? '#fbbf24' : COLORS.cardBorder}`,
+                  }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <button onClick={demoAlert} className="text-xs px-2 py-1 rounded"
+              style={{ background: '#fbbf2422', color: '#fbbf24', border: '1px solid #fbbf2444' }}>
+              ↺ 重新规划
+            </button>
+            <button onClick={onClose} className="text-xs px-2 py-1 rounded"
+              style={{ color: COLORS.textMuted, border: `1px solid ${COLORS.cardBorder}`, background: 'transparent' }}>
+              收起 ▲
+            </button>
+          </div>
+
+          {section === 'prompt' && (
+            <textarea defaultValue={`[System Prompt — Scene Agent]\n\n${SCENE_PROMPT}\n\n---\n${queryText}`}
+              rows={8} className="w-full text-xs font-mono rounded p-2"
+              style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, resize: 'vertical', outline: 'none', boxSizing: 'border-box', width: '100%' }} />
+          )}
+          {section === 'thinking' && (
+            <pre className="text-xs font-mono rounded p-2 m-0"
+              style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, whiteSpace: 'pre-wrap' }}>
+              {thinkText}
+            </pre>
+          )}
+          {section === 'output' && (
+            <div className="text-xs rounded p-3"
+              style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="font-semibold mb-2" style={{ color: '#fbbf24' }}>
+                Scene Agent Output — {scene.shots.length} Shots planned for {scene.scene}
+              </div>
+              <div className="flex flex-col gap-2">
+                {scene.shots.map((shot, i) => (
+                  <div key={shot.id} className="flex items-start gap-2 rounded p-2"
+                    style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}` }}>
+                    <span className="font-mono flex-shrink-0" style={{ color: '#fbbf24' }}>Shot {i + 1}</span>
+                    <div>
+                      <div style={{ color: COLORS.textSecondary }}>{shot.plot.slice(0, 100)}...</div>
+                      <div className="mt-1 flex gap-2" style={{ color: COLORS.textMuted }}>
+                        <span>{shot.shotType.split('（')[0]}</span>
+                        <span>·</span>
+                        <span>{shot.cameraMovement.split('（')[0]}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ─── SHOT AGENT TRACE PANEL (Scene-level) ────────────────────────────────────
+function ShotAgentTracePanel({ scene, onClose, charMap }) {
+  const [section, setSection] = useState('output')
+  const [values, setValues] = useState(() => {
+    const m = {}
+    scene.shots.forEach(s => {
+      m[s.id] = { plot: s.plot, dialogue: s.dialogue, shotType: s.shotType, cameraMovement: s.cameraMovement }
+    })
+    return m
+  })
+  const [dirty, setDirty] = useState({})
+
+  const updateField = (shotId, key, val) => {
+    setValues(p => ({ ...p, [shotId]: { ...p[shotId], [key]: val } }))
+    setDirty(p => ({ ...p, [`${shotId}-${key}`]: true }))
+  }
+
+  const involvedChars = [...new Set(scene.shots.flatMap(s => s.characters))].join(', ')
+  const promptText = `[System Prompt — Shot Agent]\n\n${SHOT_PROMPT}\n\n---\n[User Query — ${scene.scene}]\n\nGiven the following Scene Details:\n- Scene: ${scene.scene} · ${scene.title}\n- Involving Characters: ${involvedChars}\n- Scene Plot: "${scene.shots[0]?.plot?.slice(0, 120)}..."\n\nTask: Generate a complete shot list for this entire scene (${scene.shots.length} shots expected).`
+  const thinkText = `[Internal Chain-of-Thought — Shot Agent — ${scene.scene}]\n\nBreak Down Scene into Key Shots:\n→ 分析本场景整体叙事节奏，识别 ${scene.shots.length} 个关键叙事节点\n→ 确认场景角色：${involvedChars}\n\nShot Planning:\n${scene.shots.map((s, i) => `→ Shot ${i + 1}：${s.shotType.split('（')[0]} · ${s.cameraMovement.split('（')[0]} · 聚焦情绪节拍`).join('\n')}\n\nComposition & Bounding Boxes:\n→ 为每个镜头中的角色规划归一化边界框\n→ 确保边界框不超过 0.5 插值，不交叉重叠\n→ 应用三分法与引导线原则保持视觉连贯\n\n（完整版将展示模型真实输出的 Chain-of-Thought）`
+
+  return (
+    <tr>
+      <td colSpan={11} style={{ padding: 0, background: COLORS.pageBg, borderBottom: `2px solid ${COLORS.accentPurple}33` }}>
+        <div style={{ padding: '10px 12px 14px', borderLeft: `3px solid ${COLORS.accentPurple}` }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-semibold font-mono" style={{ color: COLORS.accentLight }}>Shot Agent Trace</span>
+            <span className="text-xs font-mono px-1.5 py-0.5 rounded"
+              style={{ background: `${COLORS.accentPurple}22`, color: COLORS.accentLight, border: `1px solid ${COLORS.accentPurple}44` }}>
+              {scene.scene} · {scene.shots.length} Shots
+            </span>
+            <div className="flex gap-1">
+              {[{ k: 'output', l: 'Output' }, { k: 'prompt', l: 'Prompt' }, { k: 'thinking', l: 'Thinking' }].map(({ k, l }) => (
+                <button key={k} onClick={() => setSection(k)} className="text-xs px-2 py-0.5 rounded"
+                  style={{
+                    background: section === k ? COLORS.accentPurple : 'transparent',
+                    color: section === k ? '#1a1410' : COLORS.textSecondary,
+                    border: `1px solid ${section === k ? COLORS.accentPurple : COLORS.cardBorder}`,
+                  }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <button onClick={demoAlert} className="text-xs px-2 py-1 rounded"
+              style={{ background: `${COLORS.accentPurple}22`, color: COLORS.accentLight, border: `1px solid ${COLORS.accentPurple}44` }}>
+              ↺ 重新规划
+            </button>
+            <button onClick={onClose} className="text-xs px-2 py-1 rounded"
+              style={{ color: COLORS.textMuted, border: `1px solid ${COLORS.cardBorder}`, background: 'transparent' }}>
+              收起 ▲
+            </button>
+          </div>
+
+          {section === 'prompt' && (
+            <textarea defaultValue={promptText} rows={8} className="w-full text-xs font-mono rounded p-2"
+              style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, resize: 'vertical', outline: 'none', boxSizing: 'border-box', width: '100%' }} />
+          )}
+          {section === 'thinking' && (
+            <pre className="text-xs font-mono rounded p-2 m-0"
+              style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textMuted, whiteSpace: 'pre-wrap' }}>
+              {thinkText}
+            </pre>
+          )}
+          {section === 'output' && (
+            <div className="flex flex-col gap-3">
+              <div className="text-xs font-semibold mb-1" style={{ color: COLORS.accentLight }}>
+                Shot Agent Output — {scene.shots.length} Shots planned for {scene.scene}
+              </div>
+              {scene.shots.map((shot) => (
+                <div key={shot.id} className="rounded p-3" style={{ background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}` }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-mono font-semibold" style={{ color: COLORS.accentPurple }}>{shot.number}</span>
+                    <div className="flex flex-wrap gap-1">
+                      {shot.characters.map(ch => (
+                        <CharacterPill key={ch} name={ch} color={charMap[ch] || COLORS.textMuted} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: 'plot', label: '画面描述 / Plot' },
+                      { key: 'dialogue', label: '旁白 / Dialogue' },
+                      { key: 'shotType', label: 'Shot Type' },
+                      { key: 'cameraMovement', label: 'Camera Movement' },
+                    ].map(({ key, label }) => {
+                      const isDirty = dirty[`${shot.id}-${key}`]
+                      return (
+                        <div key={key}>
+                          <div className="flex items-center gap-1 text-xs mb-1" style={{ color: COLORS.textMuted }}>
+                            {label}
+                            {isDirty && <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: COLORS.accentPurple }} title="已修改" />}
+                          </div>
+                          <textarea value={values[shot.id][key]} onChange={(e) => updateField(shot.id, key, e.target.value)} rows={2}
+                            className="w-full text-xs rounded p-2"
+                            style={{
+                              background: COLORS.pageBg,
+                              border: `1px solid ${isDirty ? COLORS.accentPurple + 'aa' : COLORS.cardBorder}`,
+                              color: COLORS.textSecondary,
+                              resize: 'vertical',
+                              outline: 'none',
+                              transition: 'border-color 0.15s',
+                            }} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ─── STORYBOARD ──────────────────────────────────────────────────────────────
+function Storyboard({ selectedShotId, onSelectShot }) {
+  const scenes = demoData.storyboard[0].scenes
+  const [expanded, setExpanded] = useState(() => {
+    const m = {}
+    scenes.forEach((s) => (m[s.id] = true))
+    return m
+  })
+  const [activeTab, setActiveTab] = useState('shot')
+  const [viewMode, setViewMode] = useState('table')
+  const [expandedSceneTraces, setExpandedSceneTraces] = useState({})
+  const [expandedShotAgentTraces, setExpandedShotAgentTraces] = useState({})
+  const [directorTraceOpen, setDirectorTraceOpen] = useState(false)
+
+  const toggleScene = (id) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+  const toggleSceneTrace = (id) => setExpandedSceneTraces((prev) => ({ ...prev, [id]: !prev[id] }))
+  const toggleShotAgentTrace = (id) => setExpandedShotAgentTraces((prev) => ({ ...prev, [id]: !prev[id] }))
+
+  const charMap = {}
+  demoData.story.characters.forEach((c) => (charMap[c.name] = c.color))
+
+  return (
+    <div
+      className="flex flex-col flex-1 overflow-hidden"
+      style={{ background: COLORS.pageBg }}
+    >
+      {/* Sub-header */}
+      <div
+        className="flex items-center justify-between px-4 py-2 flex-shrink-0"
+        style={{
+          background: COLORS.cardBg,
+          borderBottom: `1px solid ${COLORS.cardBorder}`,
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
+            Storyboard
+          </span>
+          <span className="text-xs" style={{ color: COLORS.textMuted }}>
+            Sub-script → Scene → Shot
+          </span>
+          {/* Legend */}
+          <div className="flex items-center gap-2 ml-2">
+            {[
+              { color: COLORS.statusGreen, label: '已完成' },
+              { color: '#3b82f6', label: '进行中' },
+              { color: COLORS.textMuted, label: '未开始' },
+              { color: '#ef4444', label: '失败' },
+            ].map((l) => (
+              <span key={l.label} className="flex items-center gap-1 text-xs" style={{ color: COLORS.textMuted }}>
+                <span className="w-2 h-2 rounded-full inline-block" style={{ background: l.color }} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        {/* Right controls: view mode + edit tabs */}
+        <div className="flex items-center gap-2">
+          {/* View mode */}
+          <div className="flex gap-1">
+            {[{ key: 'table', label: 'Table' }, { key: 'pipeline', label: 'Pipeline' }].map((t) => (
+              <button key={t.key}
+                onClick={() => t.key === 'pipeline' ? demoAlert() : setViewMode(t.key)}
+                className="text-xs px-2 py-1 rounded"
+                style={{
+                  background: viewMode === t.key ? `${COLORS.accentPurple}33` : 'transparent',
+                  color: viewMode === t.key ? COLORS.accentLight : COLORS.textMuted,
+                  border: `1px solid ${viewMode === t.key ? `${COLORS.accentPurple}55` : COLORS.cardBorder}`,
+                }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ width: '1px', height: '16px', background: COLORS.cardBorder }} />
+          {/* Edit tabs */}
+          <div className="flex gap-1">
+            {[{ key: 'shot', label: 'Shot 编辑' }, { key: 'scene', label: 'Scene 编辑' }].map((t) => (
+              <button key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className="text-xs px-3 py-1 rounded"
+                style={{
+                  background: activeTab === t.key ? COLORS.accentPurple : 'transparent',
+                  color: activeTab === t.key ? '#fff' : COLORS.textSecondary,
+                  border: `1px solid ${activeTab === t.key ? COLORS.accentPurple : COLORS.cardBorder}`,
+                }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-xs border-collapse" style={{ minWidth: '900px' }}>
+          <thead>
+            <tr style={{ background: COLORS.pageBg, borderBottom: `1px solid ${COLORS.cardBorder}` }}>
+              {[
+                'Scene', 'Shot', '关键帧', '画面描述', '角色',
+                '镜头类型', '运镜', '旁白', 'KF状态', '视频状态', '操作',
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-2 py-2 text-left font-medium whitespace-nowrap"
+                  style={{ color: COLORS.textMuted }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {/* Sub-script header row */}
+            <tr style={{ background: '#16100c', borderBottom: `1px solid ${COLORS.cardBorder}` }}>
+              <td colSpan={11} className="px-3 py-1.5">
+                <span className="flex items-center gap-2">
+                  <span className="font-semibold text-xs" style={{ color: COLORS.accentLight }}>
+                    Sub-Script 1 &nbsp;·&nbsp; 4 Scenes
+                  </span>
+                  <button
+                    onClick={() => setDirectorTraceOpen(!directorTraceOpen)}
+                    className="text-xs px-2 py-0.5 rounded font-mono"
+                    style={{
+                      background: directorTraceOpen ? `${COLORS.accentPurple}22` : 'transparent',
+                      color: directorTraceOpen ? COLORS.accentPurple : COLORS.textMuted,
+                      border: `1px solid ${directorTraceOpen ? `${COLORS.accentPurple}55` : COLORS.cardBorder}`,
+                    }}
+                  >
+                    Director Agent {directorTraceOpen ? '▼' : '▶'}
+                  </button>
+                </span>
+              </td>
+            </tr>
+            {directorTraceOpen && (
+              <DirectorTracePanel
+                subScript={demoData.storyboard[0]}
+                onClose={() => setDirectorTraceOpen(false)}
+              />
+            )}
+
+            {scenes.map((scene) => (
+              <>
+                {/* Scene collapsible header */}
+                <tr
+                  key={`scene-${scene.id}`}
+                  style={{ background: '#100d09', borderBottom: `1px solid ${COLORS.cardBorder}`, cursor: 'pointer' }}
+                  onClick={() => toggleScene(scene.id)}
+                >
+                  <td colSpan={11} className="px-3 py-1.5">
+                    <span className="flex items-center gap-2">
+                      <span style={{ color: COLORS.accentLight }} className="font-semibold">
+                        {expanded[scene.id] ? '▼' : '▶'}
+                      </span>
+                      <span style={{ color: COLORS.accentLight }} className="font-semibold">
+                        {scene.scene.replace('Scene ', '')}.{scene.title}
+                      </span>
+                      <span style={{ color: COLORS.textMuted }}>({scene.shots.length} Shots)</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleSceneTrace(scene.id) }}
+                        title="展开 Scene Agent Trace"
+                        className="text-xs px-2 py-0.5 rounded font-mono"
+                        style={{
+                          marginLeft: '8px',
+                          background: expandedSceneTraces[scene.id] ? '#fbbf2422' : 'transparent',
+                          color: expandedSceneTraces[scene.id] ? '#fbbf24' : COLORS.textMuted,
+                          border: `1px solid ${expandedSceneTraces[scene.id] ? '#fbbf2455' : COLORS.cardBorder}`,
+                        }}
+                      >
+                        Scene Agent {expandedSceneTraces[scene.id] ? '▼' : '▶'}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleShotAgentTrace(scene.id) }}
+                        title="展开 Shot Agent Trace"
+                        className="text-xs px-2 py-0.5 rounded font-mono"
+                        style={{
+                          background: expandedShotAgentTraces[scene.id] ? `${COLORS.accentPurple}22` : 'transparent',
+                          color: expandedShotAgentTraces[scene.id] ? COLORS.accentLight : COLORS.textMuted,
+                          border: `1px solid ${expandedShotAgentTraces[scene.id] ? `${COLORS.accentPurple}55` : COLORS.cardBorder}`,
+                        }}
+                      >
+                        Shot Agent {expandedShotAgentTraces[scene.id] ? '▼' : '▶'}
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+                {expandedSceneTraces[scene.id] && (
+                  <SceneTracePanel
+                    key={`scene-trace-${scene.id}`}
+                    scene={scene}
+                    onClose={() => toggleSceneTrace(scene.id)}
+                  />
+                )}
+                {expandedShotAgentTraces[scene.id] && (
+                  <ShotAgentTracePanel
+                    key={`shot-agent-trace-${scene.id}`}
+                    scene={scene}
+                    onClose={() => toggleShotAgentTrace(scene.id)}
+                    charMap={charMap}
+                  />
+                )}
+
+                {/* Shot rows */}
+                {expanded[scene.id] &&
+                  scene.shots.map((shot) => {
+                    const isSelected = selectedShotId === shot.id
+                    return (
+                      <tr
+                        key={shot.id}
+                        onClick={() => onSelectShot(shot.id)}
+                        className="shot-row"
+                        style={{
+                          background: isSelected ? 'rgba(245,158,11,0.10)' : COLORS.cardBg,
+                          borderBottom: `1px solid ${COLORS.cardBorder}`,
+                          cursor: 'pointer',
+                          outline: isSelected ? `1px solid ${COLORS.accentPurple}44` : 'none',
+                        }}
+                      >
+                        {/* Scene */}
+                        <td className="px-2 py-2" style={{ color: COLORS.textMuted, whiteSpace: 'nowrap' }}>
+                          {shot.scene}
+                        </td>
+
+                        {/* Shot number */}
+                        <td className="px-2 py-2 font-mono" style={{ color: COLORS.textSecondary, whiteSpace: 'nowrap' }}>
+                          {shot.number}
+                        </td>
+
+                        {/* Keyframe thumbnail */}
+                        <td className="px-2 py-2">
+                          <img
+                            src={shot.keyframe}
+                            alt={shot.number}
+                            style={{ width: '64px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: `1px solid ${COLORS.cardBorder}` }}
+                          />
+                        </td>
+
+                        {/* Plot description */}
+                        <td className="px-2 py-2" style={{ maxWidth: '180px' }}>
+                          <div
+                            style={{
+                              color: COLORS.textSecondary,
+                              overflow: 'hidden',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                            }}
+                          >
+                            {shot.plot}
+                          </div>
+                        </td>
+
+                        {/* Characters */}
+                        <td className="px-2 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {shot.characters.map((ch) => (
+                              <CharacterPill key={ch} name={ch} color={charMap[ch] || COLORS.textMuted} />
+                            ))}
+                          </div>
+                        </td>
+
+                        {/* Shot type */}
+                        <td className="px-2 py-2" style={{ maxWidth: '100px' }}>
+                          <div
+                            style={{
+                              color: COLORS.textSecondary,
+                              overflow: 'hidden',
+                              whiteSpace: 'nowrap',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '100px',
+                            }}
+                            title={shot.shotType}
+                          >
+                            {shot.shotType.split('（')[0]}
+                          </div>
+                        </td>
+
+                        {/* Camera movement */}
+                        <td className="px-2 py-2" style={{ maxWidth: '100px' }}>
+                          <div
+                            style={{
+                              color: COLORS.textSecondary,
+                              overflow: 'hidden',
+                              whiteSpace: 'nowrap',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '100px',
+                            }}
+                            title={shot.cameraMovement}
+                          >
+                            {shot.cameraMovement.split('（')[0]}
+                          </div>
+                        </td>
+
+                        {/* Dialogue */}
+                        <td className="px-2 py-2" style={{ maxWidth: '120px' }}>
+                          <div
+                            style={{
+                              color: COLORS.textMuted,
+                              overflow: 'hidden',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                            }}
+                          >
+                            {shot.dialogue}
+                          </div>
+                        </td>
+
+                        {/* KF status */}
+                        <td className="px-2 py-2">
+                          <StatusBadge status={shot.kfStatus} />
+                        </td>
+
+                        {/* Video status */}
+                        <td className="px-2 py-2">
+                          <StatusBadge status={shot.videoStatus} />
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-1">
+                            {['✏️', '📋', '🎵'].map((icon) => (
+                              <button
+                                key={icon}
+                                onClick={(e) => { e.stopPropagation(); demoAlert() }}
+                                className="text-sm hover:opacity-70 transition-opacity"
+                                title="操作"
+                              >
+                                {icon}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                }
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ─── RIGHT PANEL (Shot Detail) ────────────────────────────────────────────────
+function RightPanel({ shotId }) {
+  const [previewTab, setPreviewTab] = useState('kf')
+
+  // Flatten all shots
+  const allShots = demoData.storyboard[0].scenes.flatMap((s) => s.shots)
+  const shot = allShots.find((s) => s.id === shotId) || allShots[0]
+
+  const charMap = {}
+  demoData.story.characters.forEach((c) => (charMap[c.name] = c.color))
+
+  if (!shot) return null
+
+  return (
+    <div
+      className="flex flex-col overflow-y-auto flex-shrink-0"
+      style={{
+        width: '320px',
+        background: COLORS.cardBg,
+        borderLeft: `1px solid ${COLORS.cardBorder}`,
+      }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-3 py-2 flex-shrink-0"
+        style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}
+      >
+        <span className="text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
+          Shot 编辑
+        </span>
+        <span className="text-xs" style={{ color: COLORS.accentLight }}>
+          当前选中 Shot: {shot.number}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-3 p-3">
+        {/* Plot field */}
+        <div>
+          <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
+            画面 / Plot Description
+          </div>
+          <div
+            className="rounded p-2 text-xs leading-relaxed"
+            style={{
+              background: COLORS.pageBg,
+              border: `1px solid ${COLORS.cardBorder}`,
+              color: COLORS.textSecondary,
+              minHeight: '80px',
+            }}
+          >
+            {shot.plot}
+          </div>
+          <div className="text-right mt-0.5 text-xs" style={{ color: COLORS.textMuted }}>
+            {shot.plot.length} / 500
+          </div>
+        </div>
+
+        {/* Characters */}
+        <div>
+          <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
+            Involving Characters
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {shot.characters.map((ch) => (
+              <CharacterPill key={ch} name={ch} color={charMap[ch] || COLORS.textMuted} />
+            ))}
+          </div>
+        </div>
+
+        {/* Shot type */}
+        <div>
+          <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
+            Shot Type
+          </div>
+          <div
+            className="rounded px-2 py-1.5 text-xs"
+            style={{
+              background: COLORS.pageBg,
+              border: `1px solid ${COLORS.cardBorder}`,
+              color: COLORS.textSecondary,
+            }}
+          >
+            {shot.shotType}
+          </div>
+        </div>
+
+        {/* Camera movement */}
+        <div>
+          <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
+            Camera Movement
+          </div>
+          <div
+            className="rounded px-2 py-1.5 text-xs"
+            style={{
+              background: COLORS.pageBg,
+              border: `1px solid ${COLORS.cardBorder}`,
+              color: COLORS.textSecondary,
+            }}
+          >
+            {shot.cameraMovement}
+          </div>
+        </div>
+
+        {/* Dialogue */}
+        <div>
+          <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>
+            旁白 / Dialogue
+          </div>
+          <div
+            className="rounded px-2 py-1.5 text-xs"
+            style={{
+              background: COLORS.pageBg,
+              border: `1px solid ${COLORS.cardBorder}`,
+              color: COLORS.textSecondary,
+            }}
+          >
+            {shot.dialogue}
+          </div>
+        </div>
+
+        {/* Preview tabs */}
+        <div>
+          <div className="flex gap-1 mb-2">
+            {[
+              { key: 'kf', label: '关键帧' },
+              { key: 'video', label: '视频' },
+              { key: 'audio', label: '音频' },
+            ].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setPreviewTab(t.key)}
+                className="text-xs px-2 py-1 rounded"
+                style={{
+                  background: previewTab === t.key ? COLORS.accentPurple : 'transparent',
+                  color: previewTab === t.key ? '#fff' : COLORS.textSecondary,
+                  border: `1px solid ${previewTab === t.key ? COLORS.accentPurple : COLORS.cardBorder}`,
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {previewTab === 'kf' && (
+            <img
+              src={shot.keyframe}
+              alt="keyframe"
+              className="w-full rounded"
+              style={{ height: '180px', objectFit: 'cover', border: `1px solid ${COLORS.cardBorder}` }}
+            />
+          )}
+          {previewTab === 'video' && (
+            <video
+              src={shot.video}
+              controls
+              className="w-full rounded"
+              style={{ height: '180px', background: '#000', border: `1px solid ${COLORS.cardBorder}` }}
+            />
+          )}
+          {previewTab === 'audio' && (
+            <div
+              className="w-full rounded flex items-center justify-center text-xs"
+              style={{
+                height: '60px',
+                background: COLORS.pageBg,
+                border: `1px solid ${COLORS.cardBorder}`,
+                color: COLORS.textMuted,
+              }}
+            >
+              （已嵌入视频）
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons row 1 */}
+        <div className="flex gap-2">
+          <button
+            onClick={demoAlert}
+            className="flex-1 text-xs py-1.5 rounded"
+            style={{
+              background: COLORS.accentPurple,
+              color: '#1a1410',
+              border: 'none',
+              boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
+            }}
+          >
+            保存 Shot
+          </button>
+          <button
+            onClick={demoAlert}
+            className="flex-1 text-xs py-1.5 rounded"
+            style={{
+              background: 'transparent',
+              color: COLORS.textSecondary,
+              border: `1px solid ${COLORS.cardBorder}`,
+            }}
+          >
+            重新规划
+          </button>
+        </div>
+
+        {/* Action buttons row 2 */}
+        <div className="flex gap-2">
+          {['生成关键帧', '生成视频', '生成音频'].map((label) => (
+            <button
+              key={label}
+              onClick={demoAlert}
+              className="flex-1 text-xs py-1.5 rounded"
+              style={{
+                background: 'transparent',
+                color: COLORS.accentLight,
+                border: `1px solid ${COLORS.accentPurple}55`,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BOTTOM: LOG CARD ─────────────────────────────────────────────────────────
+function LogCard() {
+  const logRef = useRef(null)
+  const logs = demoData.logs
+
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight
+    }
+  }, [])
+
+  const agentColor = (agent) => {
+    if (agent === 'Director Agent') return COLORS.accentLight
+    if (agent === 'Scene Agent') return '#3b82f6'
+    if (agent === 'Shot Agent') return COLORS.statusGreen
+    return COLORS.textSecondary
+  }
+
+  return (
+    <div
+      className="flex flex-col rounded-lg overflow-hidden"
+      style={{
+        background: COLORS.cardBg,
+        border: `1px solid ${COLORS.cardBorder}`,
+        minWidth: 0,
+        flex: '2 1 0',
+      }}
+    >
+      <div
+        className="px-3 py-2 text-xs font-semibold flex-shrink-0"
+        style={{
+          color: COLORS.textPrimary,
+          borderBottom: `1px solid ${COLORS.cardBorder}`,
+        }}
+      >
+        执行日志
+      </div>
+      <div
+        ref={logRef}
+        className="flex-1 overflow-y-auto p-2 space-y-1"
+        style={{ maxHeight: '140px' }}
+      >
+        {logs.map((log, i) => (
+          <div key={i} className="flex items-start gap-2 text-xs">
+            <span className="font-mono flex-shrink-0" style={{ color: COLORS.textMuted }}>
+              {log.time}
+            </span>
+            <span className="flex-shrink-0 font-medium" style={{ color: agentColor(log.agent) }}>
+              [{log.agent}]
+            </span>
+            <span style={{ color: COLORS.textSecondary }}>{log.msg}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── BOTTOM: TASK INFO CARD ───────────────────────────────────────────────────
+function TaskInfoCard() {
+  const { task } = demoData
+  return (
+    <div
+      className="flex flex-col rounded-lg overflow-hidden"
+      style={{
+        background: COLORS.cardBg,
+        border: `1px solid ${COLORS.cardBorder}`,
+        flex: '1 1 0',
+        minWidth: 0,
+      }}
+    >
+      <div
+        className="px-3 py-2 text-xs font-semibold flex-shrink-0"
+        style={{
+          color: COLORS.textPrimary,
+          borderBottom: `1px solid ${COLORS.cardBorder}`,
+        }}
+      >
+        任务信息
+      </div>
+      <div className="p-3 flex flex-col gap-2 text-xs">
+        <div className="flex items-center justify-between">
+          <span style={{ color: COLORS.textMuted }}>状态</span>
+          <StatusBadge status="done" />
+        </div>
+        {/* Progress bar */}
+        <div>
+          <div className="flex justify-between mb-1">
+            <span style={{ color: COLORS.textMuted }}>进度</span>
+            <span style={{ color: COLORS.statusGreen }}>100%</span>
+          </div>
+          <div className="rounded-full overflow-hidden" style={{ height: '6px', background: COLORS.cardBorder }}>
+            <div
+              className="h-full rounded-full"
+              style={{ width: '100%', background: COLORS.statusGreen }}
+            />
+          </div>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: COLORS.textMuted }}>开始时间</span>
+          <span className="font-mono" style={{ color: COLORS.textSecondary }}>
+            {task.created_at}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: COLORS.textMuted }}>更新时间</span>
+          <span className="font-mono" style={{ color: COLORS.textSecondary }}>
+            {task.finished_at}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span style={{ color: COLORS.textMuted }}>Mode</span>
+          <span style={{ color: COLORS.textSecondary }}>
+            {task.mode} / {task.resolution} / {task.shot_duration}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BOTTOM: COST CARD ───────────────────────────────────────────────────────
+function CostCard() {
+  const { cost } = demoData
+  return (
+    <div
+      className="flex flex-col rounded-lg overflow-hidden"
+      style={{
+        background: COLORS.cardBg,
+        border: `1px solid ${COLORS.cardBorder}`,
+        flex: '1 1 0',
+        minWidth: 0,
+      }}
+    >
+      <div
+        className="px-3 py-2 text-xs font-semibold flex-shrink-0"
+        style={{
+          color: COLORS.textPrimary,
+          borderBottom: `1px solid ${COLORS.cardBorder}`,
+        }}
+      >
+        成本信息
+      </div>
+      <div className="p-3 flex flex-col gap-2 text-xs">
+        {/* Token metrics */}
+        <div className="grid grid-cols-3 gap-1">
+          {[
+            { label: '输入 Tokens', value: cost.input_tokens.toLocaleString() },
+            { label: '输出 Tokens', value: cost.output_tokens.toLocaleString() },
+            { label: '总计', value: cost.total_tokens.toLocaleString() },
+          ].map((m) => (
+            <div
+              key={m.label}
+              className="rounded p-2 text-center"
+              style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}` }}
+            >
+              <div style={{ color: COLORS.textSecondary }} className="font-semibold">
+                {m.value}
+              </div>
+              <div style={{ color: COLORS.textMuted }} className="mt-0.5">
+                {m.label}
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Cost */}
+        <div
+          className="flex items-center justify-between rounded px-2 py-1.5"
+          style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}
+        >
+          <span style={{ color: COLORS.textMuted }}>💰 预估费用 (USD)</span>
+          <span className="font-bold" style={{ color: '#fbbf24' }}>
+            ${cost.estimated_cost_usd.toFixed(4)}
+          </span>
+        </div>
+        {/* Model */}
+        <div className="flex justify-between">
+          <span style={{ color: COLORS.textMuted }}>模型</span>
+          <span className="font-mono" translate="no" style={{ color: COLORS.accentLight }}>
+            {cost.model}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BOTTOM: FINAL FILM CARD ──────────────────────────────────────────────────
+function FinalFilmCard({ onOpenModal }) {
+  return (
+    <div
+      className="flex flex-col rounded-lg overflow-hidden"
+      style={{
+        background: COLORS.cardBg,
+        border: `1px solid ${COLORS.cardBorder}`,
+        flex: '1 1 0',
+        minWidth: 0,
+      }}
+    >
+      <div
+        className="px-3 py-2 text-xs font-semibold flex-shrink-0"
+        style={{
+          color: COLORS.textPrimary,
+          borderBottom: `1px solid ${COLORS.cardBorder}`,
+        }}
+      >
+        成片生成
+      </div>
+      <div className="p-3 flex flex-col gap-2 text-xs flex-1">
+        <div style={{ color: COLORS.textSecondary }}>
+          《提灯人》完整成片，时长 40.36s，8 镜头
+        </div>
+        <button
+          onClick={onOpenModal}
+          className="w-full py-2 rounded text-sm font-semibold"
+          style={{
+            background: COLORS.accentPurple,
+            color: '#1a1410',
+            boxShadow: '0 2px 14px rgba(245,158,11,0.35)',
+          }}
+        >
+          ▶ 播放成片
+        </button>
+        <div style={{ color: COLORS.textMuted }} className="flex items-center gap-1">
+          <span>⏱</span>
+          <span>40.36 秒 | 8 镜头 720p</span>
+        </div>
+        <button
+          onClick={demoAlert}
+          className="text-xs"
+          style={{ color: COLORS.accentLight, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+        >
+          查看详情 ›
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── VIDEO MODAL ──────────────────────────────────────────────────────────────
+function VideoModal({ open, onClose }) {
+  if (!open) return null
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.85)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative rounded-xl overflow-hidden"
+        style={{
+          background: COLORS.cardBg,
+          border: `1px solid ${COLORS.cardBorder}`,
+          maxWidth: '800px',
+          width: '90vw',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between px-4 py-3"
+          style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}
+        >
+          <span className="font-semibold text-sm" style={{ color: COLORS.textPrimary }}>
+            《提灯人》成片
+          </span>
+          <button
+            onClick={onClose}
+            className="text-xl leading-none"
+            style={{ color: COLORS.textSecondary, background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            ✕
+          </button>
+        </div>
+        <video
+          controls
+          autoPlay
+          src={demoData.final_video}
+          className="w-full"
+          style={{ background: '#000', display: 'block', maxHeight: '70vh' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─── TECH SHOWCASE ────────────────────────────────────────────────────────────
+function TechShowcase() {
+  return (
+    <div
+      className="flex-shrink-0"
+      style={{
+        borderTop: `2px solid ${COLORS.cardBorder}`,
+        background: COLORS.cardBg,
+      }}
+    >
+      {/* Divider label */}
+      <div
+        className="flex items-center gap-3 px-6 py-3"
+        style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}
+      >
+        <div className="flex-1 h-px" style={{ background: COLORS.cardBorder }} />
+        <span className="text-xs font-medium px-3" style={{ color: COLORS.textMuted }}>
+          技术效果样片 / Technical Showcase
+        </span>
+        <div className="flex-1 h-px" style={{ background: COLORS.cardBorder }} />
+      </div>
+
+      <div className="flex flex-col md:flex-row items-start gap-8 px-6 py-5">
+        {/* Left: disclaimer + full script */}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs mb-4 leading-relaxed"
+            style={{ color: COLORS.textMuted, borderLeft: `2px solid ${COLORS.cardBorder}`, paddingLeft: '10px' }}>
+            此样片使用高叙事密度的已有 IP 剧本作为技术测试素材，用于展示系统的画面生成能力；产品正式内容面向原创故事创作。
+          </p>
+
+          <div className="text-xs mb-2 font-semibold tracking-wider uppercase"
+            style={{ color: COLORS.textMuted }}>原始剧本 / Original Script</div>
+
+          <div className="rounded-lg p-4 text-sm leading-relaxed"
+            style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textSecondary, maxHeight: '320px', overflowY: 'auto' }}>
+            <p className="mb-3">
+              In a world where ancient seals hold back primordial darkness, five companions are called to prevent catastrophe. <strong style={{ color: COLORS.textPrimary }}>Lyra</strong> — a young scholar whose compass points toward magic — leads the group. <strong style={{ color: COLORS.textPrimary }}>Caden</strong>, her steadfast ally, watches the horizon for danger. <strong style={{ color: COLORS.textPrimary }}>Seraphine</strong>, gifted with arcane perception, reads the cracks in the world's foundations. <strong style={{ color: COLORS.textPrimary }}>Finn</strong>, blade always at the ready, guards the flanks. And <strong style={{ color: COLORS.textPrimary }}>Elder Moros</strong> — who has guarded the seal for decades — knows what failure truly means.
+            </p>
+            <p className="mb-3">
+              The ancient seal had begun to crack. Deep fissures spread through the stone that had held the darkness at bay for generations. Elder Moros, who had devoted his life to the seal's preservation, faced the moment he had always dreaded. He called the five companions together: <em>"A primordial darkness stirs beneath the earth. The seal is failing. We must restore it — or everything ends."</em>
+            </p>
+            <p className="mb-3">
+              Fear crossed Lyra's face when she heard the words — and then something harder, something resolute, took its place. Five companions stood small against the fractured sky. Their quest had begun.
+            </p>
+            <p className="mb-3">
+              They traveled into the <strong style={{ color: COLORS.textPrimary }}>Whispering Highlands</strong> — ancient, untamed terrain holding the ruins of those who had bargained with gods and lost. Elder Moros led them deeper into the forest, where even the trees seemed to remember old wars. Lyra's compass glowed brighter with each step, pointing toward the heart of the ruins. <em>"Trust is earned,"</em> Caden said quietly. Finn didn't answer, but he kept walking. Moros watched each companion in turn, measuring what they carried — and what they hid.
+            </p>
+            <p className="mb-3">
+              Seraphine's eyes snapped toward the ruins first. Something vast and ancient stirred there — she felt it in her blood, in the static charge that raised the hair on her arms. They pressed on through the mist, five shapes moving through a silence older than kingdoms.
+            </p>
+            <p>
+              Then the ruin collapsed around Caden and Finn. Stone fell. A single passage remained open — too narrow for two. The trap had triggered. The moment of choice had arrived: who steps through, and who stays behind?
+            </p>
+          </div>
+
+          {/* Shot count */}
+          <div className="mt-3 flex gap-4 text-xs" style={{ color: COLORS.textMuted }}>
+            <span>📽 16 镜头</span>
+            <span>⏱ 80s</span>
+            <span>🌐 英文旁白</span>
+            <span>🎬 Seedance 1.0 Pro</span>
+          </div>
+        </div>
+
+        {/* Right: video */}
+        <div className="flex-shrink-0" style={{ width: '480px' }}>
+          <video
+            controls
+            src={demoData.showcase_video}
+            className="rounded-lg w-full"
+            style={{
+              background: '#000',
+              border: `1px solid ${COLORS.cardBorder}`,
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const allShots = demoData.storyboard[0].scenes.flatMap((s) => s.shots)
+  const [selectedShotId, setSelectedShotId] = useState(allShots[0]?.id || '')
+  const [modalOpen, setModalOpen] = useState(false)
+
+  return (
+    <div
+      style={{
+        background: COLORS.pageBg,
+        color: COLORS.textPrimary,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        minHeight: '100vh',
+        overflowX: 'hidden',
+      }}
+    >
+      {/* Fixed-height viewport section */}
+      <div
+        className="flex flex-col"
+        style={{ height: '100vh', overflow: 'hidden' }}
+      >
+        {/* Top bar */}
+        <TopBar />
+
+        {/* Main 3-column area — flex-1, overflow hidden */}
+        <div className="flex flex-1 overflow-hidden">
+          <LeftPanel />
+
+          {/* Center storyboard */}
+          <Storyboard selectedShotId={selectedShotId} onSelectShot={setSelectedShotId} />
+
+          {/* Right detail panel */}
+          <RightPanel shotId={selectedShotId} />
+        </div>
+
+        {/* Bottom row */}
+        <div
+          className="flex gap-3 p-3 flex-shrink-0"
+          style={{
+            background: COLORS.pageBg,
+            borderTop: `1px solid ${COLORS.cardBorder}`,
+          }}
+        >
+          <LogCard />
+          <TaskInfoCard />
+          <CostCard />
+          <FinalFilmCard onOpenModal={() => setModalOpen(true)} />
+        </div>
+      </div>
+
+      {/* Tech showcase — below the viewport, scroll to see */}
+      <TechShowcase />
+
+      {/* Modal */}
+      <VideoModal open={modalOpen} onClose={() => setModalOpen(false)} />
+    </div>
+  )
+}

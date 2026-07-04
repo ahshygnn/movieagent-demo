@@ -182,7 +182,9 @@ def dialogue_char_count(shots: list[dict]) -> int:
 
 
 def generate_keyframes(task_id: str, shots: list[dict]) -> int:
-    generated = 0
+    t0 = time.time()
+
+    jobs = []
     for index, item in enumerate(shots, start=1):
         shot_data = item["shot_data"]
         shot_id = build_shot_id(task_id, item["sub_script_name"], item["scene_name"], item["shot_name"])
@@ -190,17 +192,46 @@ def generate_keyframes(task_id: str, shots: list[dict]) -> int:
         if existing and Path(existing).is_file():
             log(f"[{index}/{len(shots)}] keyframe cache: {shot_id}")
             continue
+        jobs.append((index, item, shot_id))
 
+    if not jobs:
+        log(f"[关键帧] 全部命中缓存，耗时 {time.time() - t0:.1f} 秒")
+        return 0
+
+    max_workers = max(1, min(int(config.KEYFRAME_MAX_CONCURRENCY or 1), len(jobs)))
+    log(f"[关键帧] 并行生成 {len(jobs)} 张，workers={max_workers}...")
+
+    def run_job(job):
+        index, item, shot_id = job
+        shot_data = item["shot_data"]
         plot = shot_data.get("Plot/Visual Description", "")
         refs = refs_for_shot(task_id, shot_data.get("Involving Characters"))
         log(f"[{index}/{len(shots)}] keyframe start: {shot_id} refs={list(refs)}")
-        result = generate_keyframe(plot, shot_id, refs)
-        shot_data["keyframe_local_path"] = result["local_path"]
-        shot_data["keyframe_url"] = f"/outputs/keyframes/{shot_id}.png"
-        shot_data["keyframe_status"] = "done"
-        generated += 1
-        log(f"[{index}/{len(shots)}] keyframe done: {result['elapsed_seconds']}s")
-        save_tasks()
+        try:
+            result = generate_keyframe(plot, shot_id, refs)
+            shot_data["keyframe_local_path"] = result["local_path"]
+            shot_data["keyframe_url"] = f"/outputs/keyframes/{shot_id}.png"
+            shot_data["keyframe_status"] = "done"
+            save_tasks()
+            return index, shot_id, result["elapsed_seconds"], None
+        except Exception as exc:
+            shot_data["keyframe_status"] = "error"
+            save_tasks()
+            return index, shot_id, 0.0, exc
+
+    generated = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(run_job, job): job for job in jobs}
+        for future in as_completed(future_map):
+            index, shot_id, elapsed, error = future.result()
+            if error:
+                log(f"[{index}/{len(shots)}] keyframe failed: {shot_id}: {error}")
+            else:
+                generated += 1
+                log(f"[{index}/{len(shots)}] keyframe done: {shot_id} {elapsed:.1f}s")
+
+    total_elapsed = time.time() - t0
+    log(f"[关键帧] {generated} 张并行生成完成，耗时 {total_elapsed:.1f} 秒")
     return generated
 
 

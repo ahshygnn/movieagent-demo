@@ -3,6 +3,7 @@
 鉴权：Bearer ARK_API_KEY（与 Seedream 图片生成同一个 Key）
 """
 import base64
+import contextlib
 import os
 import time
 import requests
@@ -10,6 +11,19 @@ import config
 
 
 ARK_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+
+
+@contextlib.contextmanager
+def _no_proxy():
+    """临时移除代理环境变量，让火山方舟请求直连，用完后还原。"""
+    keys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]
+    saved = {k: os.environ.pop(k, None) for k in keys}
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is not None:
+                os.environ[k] = v
 
 
 def _valid_video_file(path: str, min_bytes: int = 4096) -> bool:
@@ -63,12 +77,13 @@ def submit_video(
         ],
     }
 
-    resp = requests.post(
-        f"{ARK_BASE}/contents/generations/tasks",
-        json=payload,
-        headers=_ark_headers(),
-        timeout=120,   # base64 大图上传需要更长时间
-    )
+    with _no_proxy():
+        resp = requests.post(
+            f"{ARK_BASE}/contents/generations/tasks",
+            json=payload,
+            headers=_ark_headers(),
+            timeout=120,   # base64 大图上传需要更长时间
+        )
     if resp.status_code not in (200, 201):
         raise Exception(f"Seedance 任务提交失败 {resp.status_code}: {resp.text}")
 
@@ -92,11 +107,12 @@ def poll_video_status(task_id: str) -> dict:
         time.sleep(interval)
         waited += interval
 
-        resp = requests.get(
-            f"{ARK_BASE}/contents/generations/tasks/{task_id}",
-            headers=_ark_headers(),
-            timeout=90,
-        )
+        with _no_proxy():
+            resp = requests.get(
+                f"{ARK_BASE}/contents/generations/tasks/{task_id}",
+                headers=_ark_headers(),
+                timeout=90,
+            )
         if resp.status_code != 200:
             raise Exception(f"Seedance 状态查询失败 {resp.status_code}: {resp.text}")
 
@@ -151,7 +167,8 @@ def generate_video(
     last_dl_err = None
     for dl_attempt in range(3):
         try:
-            video_resp = requests.get(result["video_url"], timeout=180, stream=True)
+            with _no_proxy():
+                video_resp = requests.get(result["video_url"], timeout=180, stream=True)
             video_resp.raise_for_status()
             with open(local_path, "wb") as f:
                 for chunk in video_resp.iter_content(chunk_size=1024 * 256):

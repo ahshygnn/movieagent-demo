@@ -11,19 +11,19 @@ run_batch.py
 
 # 续跑模式：填入已有 Task ID 可跳过规划和关键帧生成，直接续跑视频
 # 留空 "" 表示从头开始新任务
-RESUME_TASK_ID: str = ""
+RESUME_TASK_ID: str = "5b67458a-19fb-4fbd-a215-3c309d45652e"
 
 SYNOPSIS = """
-小松鼠奇奇住在松树上。冬天快到了，它储存的松果不够，决定去远处的松林找更多。路上下起大雨，奇奇躲进树洞等雨停。雨停后它继续赶路，终于找到满满的松果，抱着松果开心回家。
+Lyra, Caden, Seraphine, Finn, and Elder Moros embark on a perilous quest to uncover the origin of a mysterious ancient seal that has begun to crack across the land. As they journey through the Whispering Highlands, they discover that forgotten gods once made a pact with mortal kingdoms to contain a primordial darkness beneath the earth. Moros, a seasoned guardian who has protected the seal for decades, guides the group through treacherous ruins and shifting labyrinths. Along the way, tensions rise between Lyra's people and the nomadic Veldran tribes, who are blamed for awakening the darkness. As Seraphine ventures deeper into the spirit realm, she learns that she carries an ancient bloodline connected to the seal itself. Meanwhile, Caden and Finn face their own trials—betrayal, sacrifice, and the courage to trust one another. In the end, the companions embrace their roles in destiny—Seraphine chooses to bind herself to the seal and restore balance to the spirit world, while Lyra rises as a new leader, forging an alliance between the kingdoms and the Veldran people, bringing lasting peace to a fractured land.
 """.strip()
 
-CHARACTERS = ["奇奇"]
+CHARACTERS = ["Lyra", "Caden", "Seraphine", "Finn", "Elder Moros"]
 
 # ── 方式一：指定文件夹（推荐）──────────────────────────────────
 # 把角色参考图放入该文件夹，文件名与角色名一致（扩展名不限）
 # 例如文件夹内有：李明.png、小雨.jpg、老陈.webp
 # 留空字符串 "" 表示不使用文件夹方式
-CHARACTER_IMAGES_DIR: str = ""
+CHARACTER_IMAGES_DIR: str = r"f:\movieagents_demo\movieagent-demo\outputs\characters"
 
 # ── 方式二：手动指定路径（可与方式一并用，手动指定优先）──────
 # { 角色名: 图片路径 }，留空 {} 表示不使用
