@@ -77,6 +77,7 @@ Output your final result in the following JSON format:
 Please ensure the output is in JSON format"""
 
 from agents.base_agent import BaseAgent
+import config
 
 
 def _postprocess_scene_result(result: dict) -> dict:
@@ -88,7 +89,8 @@ def run_scene_agent(sub_script_plot: str, relationships: dict) -> dict:
     agent = BaseAgent(system_prompt=SCENE_PROMPT, temp=0.7)
     query = f"""Given the following inputs:
 - Script Synopsis: "{sub_script_plot}"
-- Character Relationships: {relationships}"""
+- Character Relationships: {relationships}
+- [GLOBAL STYLE] The "Visual Style" of every scene must be consistent with this overall art style: "{config.VISUAL_STYLE}\""""
     result = agent(query, parse=True)
     result = _postprocess_scene_result(result)
     return {"result": result, "usage": agent.get_usage()}

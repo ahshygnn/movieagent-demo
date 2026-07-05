@@ -47,10 +47,40 @@ YIZHAN_TTS_MAX_RETRIES = int(os.getenv("YIZHAN_TTS_MAX_RETRIES", "3"))
 # 火山方舟（图片生成 Seedream + 视频生成 Seedance）
 ARK_API_KEY = os.getenv("ARK_API_KEY", "")
 
+# 全局视觉风格预设（key 为 .env 里 VISUAL_STYLE_PRESET 可选值，value 为送入生图模型的英文风格描述）
+VISUAL_STYLE_PRESETS = {
+    "pixar": "Disney/Pixar 3D animation",
+    "shinkai": "Makoto Shinkai anime style, highly detailed, luminous skies, cinematic lighting",
+    "ghibli": "Studio Ghibli watercolor illustration, hand-painted, soft pastel tones",
+}
+DEFAULT_VISUAL_STYLE_PRESET = "pixar"
+
+
+def _resolve_visual_style() -> str:
+    """
+    风格解析优先级：
+      1) VISUAL_STYLE 显式自由文本（最高优先，给需要自定义的高级用户）
+      2) VISUAL_STYLE_PRESET 命名预设（pixar / shinkai / ghibli）
+      3) 默认预设 pixar（与历史默认行为一致）
+    """
+    free_text = os.getenv("VISUAL_STYLE", "").strip()
+    if free_text:
+        return free_text
+    preset = os.getenv("VISUAL_STYLE_PRESET", DEFAULT_VISUAL_STYLE_PRESET).strip().lower()
+    return VISUAL_STYLE_PRESETS.get(preset, VISUAL_STYLE_PRESETS[DEFAULT_VISUAL_STYLE_PRESET])
+
+
+# 全局视觉风格（三处引用统一读这一个变量：generation/image.py、agents/shot.py、agents/scene.py）
+VISUAL_STYLE = _resolve_visual_style()
+
 # 模型名称
 LLM_MODEL = "claude-sonnet-4-6"
 IMAGE_MODEL = "jimeng_t2i_v40"
 VIDEO_MODEL = "doubao-seedance-1-0-pro-fast-251015"
+# 人物定妆图生成模型（一展平台，走 /v1/chat/completions）
+IMAGE2_MODEL = os.getenv("IMAGE2_MODEL", "gpt-image-2-all").strip()
+# 关键帧质量反思-审核模型（视觉理解，走一展 /v1/chat/completions，OpenAI 兼容多模态）
+REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "gemini-3-flash-preview").strip()
 
 IMAGE_SIZE = "1024x1024"
 VIDEO_SIZE = "960x960"
@@ -71,6 +101,13 @@ VIDEO_RESOLUTION = os.getenv("VIDEO_RESOLUTION", "480p" if IS_DRAFT_MODE else "7
 SHOT_MAX_PER_SCENE = int(os.getenv("SHOT_MAX_PER_SCENE", "2" if IS_DRAFT_MODE else "0"))
 VIDEO_MAX_CONCURRENCY = int(os.getenv("VIDEO_MAX_CONCURRENCY", "2"))
 
+# 关键帧反思-重生成模块
+# verdict(pass/minor/severe) 由审核模型按每维判据直接输出，不用数字阈值反推；score(1-5) 仅日志/择优用。
+ENABLE_KEYFRAME_REFLECTION = _env_bool("ENABLE_KEYFRAME_REFLECTION", True)
+KEYFRAME_REFLECTION_MAX_RETRIES = int(os.getenv("KEYFRAME_REFLECTION_MAX_RETRIES", "2"))  # 最多生成 1+2=3 次/张
+REFLECTION_MAX_SIDE = int(os.getenv("REFLECTION_MAX_SIDE", "768"))   # 审核前图片下采样最长边
+REFLECTION_FAIL_OPEN = _env_bool("REFLECTION_FAIL_OPEN", True)       # 审核服务故障时是否放行出图
+
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
 
 COST_TRACKING = True
@@ -80,3 +117,4 @@ VIDEO_POLL_MAX_RETRIES = 60
 
 KEYFRAME_DIR = "outputs/keyframes"
 VIDEO_DIR = "outputs/videos"
+CHARACTER_DIR = "outputs/characters"

@@ -185,6 +185,28 @@ def _ffmpeg_exe() -> str:
         return "ffmpeg"
 
 
+def _audio_fit_filter(
+    audio_duration: float,
+    video_duration: float,
+    tolerance: float = 0.05,
+    max_tempo: float = 1.2,
+) -> str | None:
+    """
+    让音频对齐画面时长：仅在音频比画面长时，用 atempo 轻微变速压缩（变速不变调）。
+    画面永远不动。变速倍率封顶 max_tempo（默认 1.2x，人耳基本无感），只用于吸收
+    源头约束后残留的小幅超时；超过封顶的部分不再强行加速（避免语音生硬/失真），
+    允许音频尾巴略微拖过画面。音频短于画面时返回 None（原样播放，剩余静音）。
+
+    台词长度的主控在 Shot Agent 层（生成即精炼、自然贴合 ~5 秒镜头），这里只做兜底。
+    """
+    if video_duration <= 0 or audio_duration <= video_duration + tolerance:
+        return None
+    factor = min(audio_duration / video_duration, max_tempo)
+    if factor <= 1.0 + 1e-3:
+        return None
+    return f"atempo={factor:.4f}"
+
+
 def mux_audio_with_video(
     video_path: str,
     audio_path: str,
@@ -192,8 +214,10 @@ def mux_audio_with_video(
 ) -> str:
     video_duration = _video_duration(video_path)
     audio_duration = _audio_duration(audio_path)
-    extend_by = max(0.0, audio_duration - video_duration)
+    fit_filter = _audio_fit_filter(audio_duration, video_duration)
 
+    # 画面始终原样拷贝（-c:v copy），保持 Seedance 原生流的流畅度，
+    # 也让所有片段编码同构，避免成片拼接接缝卡顿。
     cmd = [
         _ffmpeg_exe(),
         "-y",
@@ -205,17 +229,14 @@ def mux_audio_with_video(
         "0:v:0",
         "-map",
         "1:a:0",
+        "-c:v",
+        "copy",
     ]
-    if extend_by > 0.05:
-        cmd.extend(["-vf", f"tpad=stop_mode=clone:stop_duration={extend_by:.3f}"])
-        cmd.extend(["-c:v", "libx264"])
-    else:
-        cmd.extend(["-c:v", "copy"])
+    if fit_filter:
+        cmd.extend(["-filter:a", fit_filter])
     cmd.extend([
         "-c:a",
         "aac",
-        "-pix_fmt",
-        "yuv420p",
         "-movflags",
         "+faststart",
         output_path,

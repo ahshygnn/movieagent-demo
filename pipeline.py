@@ -8,6 +8,7 @@ from pathlib import Path
 from agents.director import run_director_agent
 from agents.scene import run_scene_agent
 from agents.shot import run_shot_agent
+from agents.translator import translate_synopsis
 import metrics.collector as mc
 
 # 内存任务存储（demo 阶段不需要数据库）
@@ -114,6 +115,11 @@ def run_full_pipeline(task_id: str, movie_script: str, characters: list):
     try:
         pipeline_start = time.time()
         tasks[task_id]["timing"] = {}
+
+        # ── Step 0: Translate synopsis to English ───────────────
+        _log(task_id, "🌐 翻译剧本为英文...")
+        movie_script, translate_usage = translate_synopsis(movie_script, characters)
+        _add_cost(task_id, translate_usage)
 
         # ── Step 1: Director Agent ──────────────────────────────
         tasks[task_id]["status"] = "director_running"

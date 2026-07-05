@@ -39,11 +39,13 @@ Before generating the final output, perform structured reasoning to ensure logic
    - **Avoid Action Pile-up:** Within a ~5-second shot, describe motion as a natural sequence over time rather than compressing multiple actions into a single instant.
    - These guidelines apply to motion descriptions only; do NOT add any explanatory physics text to the JSON output.
 
-7. **Ensure Dialogue Accuracy**
+7. **Ensure Dialogue Accuracy & Fit to Shot Duration**
    - Extract **relevant dialogue** for each shot, ensuring proper pacing.
    - Format dialogue in JSON structure with character names.
    - All dialogue in `Dialogue` must be written in Simplified Chinese.
    - If the source story or scene is in English, translate or localize the dialogue into natural Simplified Chinese.
+   - **Keep dialogue short enough to be spoken naturally within the ~5-second shot** (this is a spoken clip, not a subtitle). Chinese TTS speaks roughly 4-5 characters per second, so the TOTAL spoken content in one shot — summed across ALL speakers — should be about **20 Simplified-Chinese characters or fewer**, leaving natural breathing room. Prefer a **single short line**; only use two lines when both are very brief.
+   - Author concise lines from the start — do NOT write a long line expecting it to be compressed later. If a scene's dialogue is long, keep only the most essential words for this shot, or split the remaining lines into the next shot rather than cramming them into one 5-second shot.
 
 After completing this internal reasoning, proceed to the final structured output.]
 
@@ -52,12 +54,13 @@ Step 2: Final Output
 -------------------------------
 Based on your internal reasoning, generate a structured shot list. Ensure that:
 - Each shot contributes to narrative flow and emotional impact.
-- Each Scene should contain about 2-4 shots (prefer 2-4). Prioritize covering the scene's key actions and emotional beats completely; only merge shots when they are clearly redundant or repetitive. Do not pad a scene with unnecessary shots, but do not omit shots needed to tell the scene clearly.
+- Each Scene should contain between 1 and 4 shots, driven strictly by how much distinct visual/emotional content the scene actually has — there is no minimum of 2. Use a single shot for a simple, single-beat, or purely transitional scene; use 2-4 shots only when the scene contains multiple distinct visual beats, actions, or emotional shifts that each genuinely need their own shot. Prioritize covering the scene's key actions and emotional beats completely; only add a shot when it captures something the existing shots do not. Do not pad a scene with unnecessary shots, but do not omit shots needed to tell the scene clearly.
 - All motion in "Coarse Plot" and "Camera Movement" must follow the Physical Plausibility principles: explicit forward-consistent direction, correct gravity/trajectory, natural speed/inertia, realistic weight, and no action pile-up.
 - Character positioning follows bounding box constraints [x, y, x1, y1] (normalized, interpolation must not exceed 0.5).
 - Bounding boxes must not intersect or overlap.
 - Dialogue is formatted properly in JSON.
 - Dialogue in `Dialogue` must be Simplified Chinese, even when the input script is English.
+- Dialogue must fit the shot's ~5-second spoken duration: total spoken content per shot (across all speakers) is about 20 Simplified-Chinese characters or fewer. Prefer one short line; write concise lines from the start rather than long lines to be shortened later. Split or trim overflow into other shots instead of cramming.
 - The character names mentioned in the description must match the provided names exactly.
 - Each shot should include no more than three characters, preferably one or two. This ensures alignment with the image generation model's maximum of three character reference images.
 - Involving Characters must include only the names of existing characters and no modifiers.
@@ -162,6 +165,7 @@ def run_shot_agent(scene_details: dict) -> dict:
 - Emotional Tone: "{scene_details['Emotional Tone']}"
 - Key Props: {scene_details['Key Props']}
 - Cinematography Notes: "{scene_details['Cinematography Notes']}"
+- [GLOBAL STYLE] Every shot must visually match this overall art style: "{config.VISUAL_STYLE}"
 - [STYLE ANCHOR] Visual Style (must remain strictly consistent across every shot in this scene): "{style_anchor}"
 {shot_count_instruction}
 """

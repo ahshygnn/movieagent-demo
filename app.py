@@ -15,6 +15,7 @@ from pipeline import tasks, create_task, run_full_pipeline, save_tasks
 import metrics.collector as mc
 
 from generation.image import generate_keyframe
+from generation.character import generate_character_references, generate_character_reference
 from generation.concat import concat_videos
 from generation.postprocess import prepare_dubbing_assets
 from generation.shot_pipeline import build_shot_id, generate_shot_video_artifacts, shot_video_complete
@@ -51,6 +52,20 @@ class KeyframeRequest(BaseModel):
     sub_script_name: str
     scene_name: str
     shot_name: str
+
+class CharacterGenRequest(BaseModel):
+    task_id: str
+    characters: list[str] = []       # 不传则用 task 规划阶段的角色
+    script_synopsis: str = ""        # 不传则用 task 里保存的剧本
+
+class CharacterRegenRequest(BaseModel):
+    task_id: str
+    name: str                        # 要重生成的角色名
+    feedback: str = ""               # 用户对上一版定妆图的修改意见
+
+class CharacterApproveRequest(BaseModel):
+    task_id: str
+    names: list[str] = []            # 不传则采用全部 pending 角色
 
 class VideoRequest(BaseModel):
     task_id: str
@@ -114,10 +129,140 @@ def start_generate(req: GenerateRequest, background_tasks: BackgroundTasks):
     task_id = create_task()
     tasks[task_id]["character_refs"] = req.character_refs or {}
     tasks[task_id]["voice_refs"] = req.voice_refs or {}
+    # 保存原始剧本与角色名，供人物定妆图生成接口复用
+    tasks[task_id]["script_synopsis"] = req.script_synopsis
+    tasks[task_id]["characters"] = req.characters
     background_tasks.add_task(
         run_full_pipeline, task_id, req.script_synopsis, req.characters
     )
     return {"task_id": task_id}
+
+
+def _characters_from_sub_scripts(sub_scripts: dict) -> list[str]:
+    """从 sub_scripts 里汇总所有出现过的角色名（去重、保持出现顺序）作为兜底。"""
+    names: list[str] = []
+    for ss in (sub_scripts or {}).get("Sub-Script", {}).values():
+        for name in (ss or {}).get("Involving Characters", []) or []:
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def _script_from_sub_scripts(sub_scripts: dict) -> str:
+    """把各子剧本的 Plot 拼成一段文本作为剧本兜底。"""
+    plots = [
+        str((ss or {}).get("Plot", "") or "").strip()
+        for ss in (sub_scripts or {}).get("Sub-Script", {}).values()
+    ]
+    return "\n\n".join(p for p in plots if p)
+
+
+@app.post("/api/generate/characters", summary="为剧本人物生成全身正面定妆照（image-2）")
+def api_generate_characters(req: CharacterGenRequest):
+    task = tasks.get(req.task_id)
+    if not task:
+        return {"error": "task not found"}
+
+    sub_scripts = task.get("sub_scripts") or {}
+    characters = (
+        req.characters
+        or task.get("characters")
+        or _characters_from_sub_scripts(sub_scripts)
+    )
+    if not characters:
+        return {"error": "no characters found for this task; pass 'characters' explicitly"}
+
+    script = (
+        req.script_synopsis
+        or task.get("script_synopsis")
+        or _script_from_sub_scripts(sub_scripts)
+    )
+
+    try:
+        out = generate_character_references(script, characters)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    # 合并写回任务级 character_refs（下游关键帧按 Involving Characters 自动取用）
+    refs = out.get("character_refs") or {}
+    designs = out.get("designs") or {}
+    tasks[req.task_id].setdefault("character_refs", {})
+    tasks[req.task_id]["character_refs"].update(refs)
+    # 存 designs（供关键帧反思审核取 Appearance 文本）+ 每角色状态（pending，供人工审核）
+    tasks[req.task_id].setdefault("character_designs", {})
+    tasks[req.task_id]["character_designs"].update(designs)
+    tasks[req.task_id].setdefault("character_ref_status", {})
+    for name in refs:
+        tasks[req.task_id]["character_ref_status"][name] = "pending"
+    save_tasks()
+
+    return {
+        "characters": {
+            name: {
+                "character_url": f"/outputs/characters/{os.path.basename(path)}",
+                "status": tasks[req.task_id]["character_ref_status"].get(name, "pending"),
+            }
+            for name, path in refs.items()
+        },
+        "errors": out.get("errors") or {},
+        "designs": designs,
+    }
+
+
+@app.post("/api/regenerate/character_ref", summary="带用户反馈重生成单个角色定妆图")
+def api_regenerate_character_ref(req: CharacterRegenRequest):
+    task = tasks.get(req.task_id)
+    if not task:
+        return {"error": "task not found"}
+
+    designs = task.get("character_designs") or {}
+    entry = designs.get(req.name) or {}
+    appearance = str(entry.get("Appearance", "") or "").strip()
+    background = str(entry.get("Background", "") or "").strip()
+
+    try:
+        res = generate_character_reference(
+            req.name, appearance, background, feedback=req.feedback,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    path = res["path"]
+    tasks[req.task_id].setdefault("character_refs", {})[req.name] = path
+    tasks[req.task_id].setdefault("character_ref_status", {})[req.name] = "pending"
+    save_tasks()
+
+    return {
+        "name": req.name,
+        "character_url": f"/outputs/characters/{os.path.basename(path)}",
+        "status": "pending",
+        "elapsed_seconds": res.get("elapsed_seconds"),
+    }
+
+
+@app.post("/api/character_refs/approve", summary="人工审核通过，锁定角色定妆图")
+def api_approve_character_refs(req: CharacterApproveRequest):
+    task = tasks.get(req.task_id)
+    if not task:
+        return {"error": "task not found"}
+
+    status_map = tasks[req.task_id].setdefault("character_ref_status", {})
+    targets = req.names or list((task.get("character_refs") or {}).keys())
+    approved = []
+    for name in targets:
+        if name in (task.get("character_refs") or {}):
+            status_map[name] = "approved"
+            approved.append(name)
+    save_tasks()
+    return {"approved": approved, "character_ref_status": status_map}
+
+
+def _involving_names(involving) -> list:
+    if isinstance(involving, dict):
+        return list(involving.keys())
+    if isinstance(involving, list):
+        return list(involving)
+    return []
 
 
 def _character_refs_for_shot(task_character_refs: dict, involving) -> dict:
@@ -125,16 +270,34 @@ def _character_refs_for_shot(task_character_refs: dict, involving) -> dict:
     if not task_character_refs:
         return {}
     out = {}
-    if isinstance(involving, dict):
-        names = involving.keys()
-    elif isinstance(involving, list):
-        names = involving
-    else:
-        return {}
-    for name in names:
+    for name in _involving_names(involving):
         if name in task_character_refs:
             out[name] = task_character_refs[name]
     return out
+
+
+def _appearance_texts_for_shot(task_character_designs: dict, involving) -> dict:
+    """按 Shot 的 Involving Characters 从任务级 character_designs 取英文外貌描述，供反思审核人物一致性作辅助。"""
+    if not task_character_designs:
+        return {}
+    out = {}
+    for name in _involving_names(involving):
+        entry = task_character_designs.get(name)
+        if isinstance(entry, dict):
+            appearance = str(entry.get("Appearance", "") or "").strip()
+            if appearance:
+                out[name] = appearance
+    return out
+
+
+def _add_review_cost(task_id: str, review: dict | None) -> None:
+    """把关键帧反思审核消耗的 token 累加进任务成本。"""
+    if not review:
+        return
+    usage = review.get("usage") or {}
+    cost = tasks[task_id].setdefault("cost", {"input_tokens": 0, "output_tokens": 0})
+    cost["input_tokens"] = cost.get("input_tokens", 0) + int(usage.get("input_tokens", 0) or 0)
+    cost["output_tokens"] = cost.get("output_tokens", 0) + int(usage.get("output_tokens", 0) or 0)
 
 
 @app.get("/api/status/{task_id}", summary="查询任务状态和中间结果")
@@ -164,13 +327,14 @@ def api_generate_keyframe(req: KeyframeRequest):
 
     shot_id = build_shot_id(req.task_id, req.sub_script_name, req.scene_name, req.shot_name)
     plot = shot_data.get("Plot/Visual Description", "")
-    matched_refs = _character_refs_for_shot(
-        task.get("character_refs") or {},
-        shot_data.get("Involving Characters"),
-    )
+    involving = shot_data.get("Involving Characters")
+    matched_refs = _character_refs_for_shot(task.get("character_refs") or {}, involving)
+    matched_appearance = _appearance_texts_for_shot(task.get("character_designs") or {}, involving)
 
     try:
-        result = generate_keyframe(plot, shot_id, matched_refs)
+        result = generate_keyframe(
+            plot, shot_id, matched_refs, appearance_texts=matched_appearance,
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
@@ -179,13 +343,20 @@ def api_generate_keyframe(req: KeyframeRequest):
     shot_ref["keyframe_local_path"] = result["local_path"]
     shot_ref["keyframe_url"] = f"/outputs/keyframes/{shot_id}.png"
     shot_ref["keyframe_status"] = "done"
+    review = result.get("review")
+    if review is not None:
+        shot_ref["keyframe_review"] = review
+        shot_ref["keyframe_review_status"] = review.get("review_status")
+        _add_review_cost(req.task_id, review)
 
     mc.record_keyframe_latency(req.task_id, shot_id, result["elapsed_seconds"])
+    save_tasks()
 
     return {
         "keyframe_url": f"/outputs/keyframes/{shot_id}.png",
         "elapsed_seconds": result["elapsed_seconds"],
         "keyframe_size": result.get("keyframe_size"),
+        "keyframe_review_status": (review or {}).get("review_status") if review else None,
     }
 
 
@@ -211,16 +382,18 @@ def api_generate_keyframes_batch(req: BatchKeyframeRequest):
         ss_name, scene_name, shot_name, shot_data = job
         shot_id = build_shot_id(req.task_id, ss_name, scene_name, shot_name)
         plot = (shot_data or {}).get("Plot/Visual Description", "")
-        matched_refs = _character_refs_for_shot(
-            task.get("character_refs") or {},
-            (shot_data or {}).get("Involving Characters"),
+        involving = (shot_data or {}).get("Involving Characters")
+        matched_refs = _character_refs_for_shot(task.get("character_refs") or {}, involving)
+        matched_appearance = _appearance_texts_for_shot(task.get("character_designs") or {}, involving)
+        result = generate_keyframe(
+            plot, shot_id, matched_refs, mode=req.mode, appearance_texts=matched_appearance,
         )
-        result = generate_keyframe(plot, shot_id, matched_refs, mode=req.mode)
         return ss_name, scene_name, shot_name, shot_id, result
 
     start = time.time()
     results = []
     errors = []
+    review_fail = 0
     workers = min(config.KEYFRAME_MAX_CONCURRENCY, len(shot_jobs))
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -234,6 +407,13 @@ def api_generate_keyframes_batch(req: BatchKeyframeRequest):
                 shot_ref["keyframe_url"] = f"/outputs/keyframes/{shot_id}.png"
                 shot_ref["keyframe_status"] = "done"
                 shot_ref["keyframe_size"] = result.get("keyframe_size")
+                review = result.get("review")
+                if review is not None:
+                    shot_ref["keyframe_review"] = review
+                    shot_ref["keyframe_review_status"] = review.get("review_status")
+                    _add_review_cost(req.task_id, review)
+                    if review.get("review_status") == "fail":
+                        review_fail += 1
                 mc.record_keyframe_latency(req.task_id, shot_id, result["elapsed_seconds"])
                 results.append(shot_id)
             except Exception as e:
@@ -251,6 +431,7 @@ def api_generate_keyframes_batch(req: BatchKeyframeRequest):
     return {
         "generated": len(results),
         "failed": len(errors),
+        "review_fail": review_fail,
         "errors": errors,
         "elapsed_seconds": elapsed,
         "avg_seconds_per_frame": avg,

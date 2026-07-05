@@ -21,14 +21,15 @@ Before generating the final output, perform a structured reasoning process to en
    - Identify any **explicit or implicit timeline cues** (e.g., "the next morning," "two weeks later").
    - Ensure that each sub-script contains an appropriate **time annotation** for clarity.
 
-4. **Validate Sub-Script Breakdown Criteria (Episode Segmentation)**
+4. **Validate Sub-Script Breakdown Criteria (Content-Driven Segmentation)**
    - Ensure that **each sub-script contains at least 50 words** while preserving the original content exactly.
-   - Apply the following Sub-Script Segmentation Rules (each Sub-Script = one ~1-minute episode):
-     * Treat each Sub-Script as ONE episode of roughly one minute of animation, corresponding to about 10-12 shots worth of content. This is a continuous series: episodes connect sequentially, not standalone stories.
-     * Segment the story at natural narrative transition points (a scene ending, a plot beat resolving), so each Sub-Script is a coherent, continuous segment.
-     * Narrative completeness takes priority over exact shot count: aim for ~1 minute per episode, but if a plot beat needs slightly more or fewer shots to be told completely, prioritize telling it completely. Do NOT skip key plot points just to hit a number.
-     * Do NOT over-segment: never split every short sentence into its own Sub-Script; merge closely related short events into one Sub-Script.
-     * Do NOT under-segment: do not compress a long story into a single Sub-Script; split a long story into multiple episodes.
+   - Apply the following Sub-Script Segmentation Rules — the number of Sub-Scripts must be driven by how much distinct narrative content actually exists in the input, NOT by a fixed template to fill:
+     * First determine whether the input is (a) a single, complete, self-contained short story whose full arc (setup → event → resolution) reads as one continuous unit, or (b) a longer/serialized narrative that genuinely contains multiple independent time/location/plot-beat transitions.
+     * If (a): use a SINGLE Sub-Script for the whole story. Do NOT force a short, complete story into a multi-episode structure just to hit a shot-count target — there is no minimum number of Sub-Scripts to fill.
+     * If (b): split only at natural narrative transition points where the story itself shifts — a scene ending, a time skip, a location change, a plot beat resolving. Each resulting Sub-Script may correspond to roughly ~1 minute / 10-12 shots of content, but this is a soft ceiling for how much a single Sub-Script should hold, not a quota every Sub-Script must reach.
+     * Narrative completeness always takes priority over matching any target length: never pad a Sub-Script with restated content, and never split content apart merely to approach a shot-count figure.
+     * Do NOT over-segment: never split every short sentence or closely related event into its own Sub-Script.
+     * Do NOT under-segment: do not compress a story that genuinely spans multiple independent transitions into a single Sub-Script.
    - Hard cap: total number of Sub-Scripts must not exceed 20.
    - Ensure each sub-script is **self-contained yet flows naturally** into the next.
 
@@ -43,7 +44,7 @@ Step 2: Final Output
 -------------------------------
 Based on your internal reasoning, produce the final detailed sub-script breakdown. Ensure that:
 - The total number of sub-scripts does not exceed 20.
-- Each Sub-Script represents one ~1-minute episode (~10-12 shots worth of content): segment at natural narrative transitions; do not over-split closely related short events; do not compress a long story into one sub-script.
+- The number of Sub-Scripts reflects the actual number of distinct narrative transitions in the input — a short, complete, self-contained story stays as ONE Sub-Script; only split further when the story itself contains multiple independent time/location/plot-beat shifts. The "~1 minute / 10-12 shots" figure is a soft ceiling per Sub-Script, not a target to fill. Do not over-split closely related short events; do not compress a story with genuinely multiple transitions into one sub-script.
 - Each sub-script maintains a tight narrative progression.
 - Each sub-script is at least 50 words long, exactly matching the corresponding content from the script (i.e., no modification or oversimplification, merely split).
 - You clearly describe the relationships between all characters (e.g., "Character1 - Character2": "Nephew-Uncle").
