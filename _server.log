@@ -1,0 +1,130 @@
+INFO:     Started server process [34588]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+已恢复 30 个历史任务
+  [反思 1/3] 718d2afa-2016-4f71-bd94-37ed494634d0_Sub-Script_1_Scene_2_Shot_1 → pass (severe=0, score=20)
+INFO:     127.0.0.1:52410 - "POST /api/generate/keyframe HTTP/1.1" 200 OK
+  [测试角色_throwaway] 完成，耗时 44.5s → outputs/characters\测试角色_throwaway.png
+INFO:     127.0.0.1:62459 - "POST /api/regenerate/character_ref HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63857 - "POST /api/generate HTTP/1.1" 200 OK
+? 翻译剧本为英文...
+? Director Agent 开始分析剧本...
+INFO:     127.0.0.1:64363 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50258 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50280 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Director Agent 完成，生成 3 个子剧本
+? Scene Agent 处理 Sub-Script 1...
+INFO:     127.0.0.1:50295 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50321 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50330 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63390 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54623 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64991 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53322 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Scene Agent 处理 Sub-Script 2...
+INFO:     127.0.0.1:53352 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50229 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56576 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53487 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56995 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57008 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Scene Agent 处理 Sub-Script 3...
+INFO:     127.0.0.1:54421 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55100 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64547 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Scene Agent 完成
+?? Shot Agent 并行处理 7 个场景（最多 3 路并发）...
+INFO:     127.0.0.1:59575 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59595 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59632 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Shot Agent 完成 Sub-Script 1 → Scene 1
+INFO:     127.0.0.1:59645 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Shot Agent 完成 Sub-Script 1 → Scene 3
+? Shot Agent 完成 Sub-Script 1 → Scene 2
+INFO:     127.0.0.1:63529 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63154 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Shot Agent 完成 Sub-Script 2 → Scene 1
+INFO:     127.0.0.1:64336 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59156 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Shot Agent 完成 Sub-Script 2 → Scene 3
+? Shot Agent 完成 Sub-Script 2 → Scene 2
+INFO:     127.0.0.1:55205 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55236 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+? Shot Agent 完成 Sub-Script 3 → Scene 1
+? 规划阶段全部完成！现在可以开始生成关键帧。
+INFO:     127.0.0.1:55257 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60707 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+  [老猫头鹰] 完成，耗时 38.03s → outputs/characters\老猫头鹰.png
+  [小狐狸] 完成，耗时 39.67s → outputs/characters\小狐狸.png
+INFO:     127.0.0.1:60736 - "POST /api/generate/characters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58296 - "POST /api/character_refs/approve HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58328 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_3_Shot_1 → pass (severe=0, score=16)
+INFO:     127.0.0.1:63382 - "POST /api/generate/keyframe HTTP/1.1" 200 OK
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_3_Shot_2 → pass (severe=0, score=16)
+INFO:     127.0.0.1:51661 - "POST /api/generate/keyframe HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60981 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_3_Shot_3 → pass (severe=0, score=20)
+INFO:     127.0.0.1:55339 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62823 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53347 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_3_Shot_3 → pass (severe=0, score=20)
+INFO:     127.0.0.1:55318 - "POST /api/generate/keyframe HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55334 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60897 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63276 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63277 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63278 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_1_Shot_2 → pass (severe=0, score=15)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_1_Shot_1 → pass (severe=0, score=15)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_3_Shot_4 → pass (severe=0, score=16)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_2_Shot_2 → warn (severe=0, score=17)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_2_Shot_1 → fail (severe=1, score=16)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_2_Shot_3 → warn (severe=0, score=19)
+  [反思 2/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_1_Scene_2_Shot_1 → warn (severe=0, score=18)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_1_Shot_2 → pass (severe=0, score=16)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_1_Shot_1 → warn (severe=0, score=15)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_3_Shot_2 → pass (severe=0, score=20)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_3_Shot_1 → pass (severe=0, score=16)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_2_Shot_2 → pass (severe=0, score=15)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_2_Shot_1 → pass (severe=0, score=16)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_3_Shot_3 → pass (severe=0, score=16)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_2_Shot_3 → pass (severe=0, score=15)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_2_Scene_2_Shot_4 → warn (severe=0, score=19)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_3_Scene_1_Shot_1 → pass (severe=0, score=20)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_3_Scene_1_Shot_2 → pass (severe=0, score=20)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_3_Scene_1_Shot_3 → warn (severe=0, score=15)
+  [反思 1/3] 10015e62-b575-4dec-ae27-fcceffb70349_Sub-Script_3_Scene_1_Shot_4 → pass (severe=0, score=20)
+INFO:     127.0.0.1:63279 - "POST /api/generate/keyframes_batch HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61469 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61470 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61471 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61472 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52210 - "POST /api/generate/videos HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63720 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62193 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55195 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56608 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56630 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54528 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56710 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59871 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59894 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49912 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63167 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56931 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64978 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49671 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50421 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56206 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51560 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62340 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51695 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51737 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64007 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63586 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61987 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58950 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57641 - "GET /api/status/10015e62-b575-4dec-ae27-fcceffb70349 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57649 - "POST /api/generate/final_video HTTP/1.1" 200 OK

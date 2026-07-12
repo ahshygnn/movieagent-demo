@@ -19,6 +19,34 @@ const COLORS = {
 const demoAlert = () =>
   window.alert('该功能在完整版中支持实时生成，当前为已完成示例任务的展示。')
 
+const FINISHED_FILMS = [
+  {
+    title: '森林图书馆的借阅者',
+    video: '/videos/10015e62-b575-4dec-ae27-fcceffb70349_final.mp4',
+    meta: '22 镜头 · 720p · 已配音',
+  },
+  {
+    title: '提灯人',
+    video: '/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_tidengman_final.mp4',
+    meta: '8 镜头 · 720p · 已配音',
+  },
+  {
+    title: '天台上的信号',
+    video: '/videos/155d84f0-d595-4e3a-a48e-7cebaa50e579_final.mp4',
+    meta: '16 镜头 · 720p',
+  },
+  {
+    title: '修伞匠',
+    video: '/videos/718d2afa-2016-4f71-bd94-37ed494634d0_final.mp4',
+    meta: '28 镜头 · 720p',
+  },
+  {
+    title: '松鼠奇奇',
+    video: '/videos/bf7d7db7-b545-4df9-889f-91a38afd6a20_squirrel_final_subtitled.mp4',
+    meta: '6 镜头 · 720p · 字幕版',
+  },
+]
+
 // Real agent system prompts from agents/shot.py and agents/scene.py
 const SHOT_PROMPT = `You are a professional movie director. Your task is to transform the provided scene details into a well-structured shot list that effectively captures the emotions, plot, and visual storytelling. Follow the structured reasoning process below before generating the final output.
 
@@ -186,7 +214,7 @@ function phaseProgress(animPhase, visibleSceneCount, sceneTotal) {
 }
 
 // ─── TOP BAR ─────────────────────────────────────────────────────────────────
-function TopBar({ animPhase, onStartDemo, onReset }) {
+function TopBar({ animPhase, onStartDemo, onReset, onOpenGallery }) {
   const isDone = animPhase === 'done'
   const isAnimating = animPhase !== 'empty' && animPhase !== 'done'
 
@@ -217,6 +245,18 @@ function TopBar({ animPhase, onStartDemo, onReset }) {
         </>
       )}
       <div className="flex-1" />
+      <button
+        onClick={onOpenGallery}
+        className="text-xs px-3 py-1 rounded font-medium"
+        style={{
+          border: `1px solid ${COLORS.accentPurple}`,
+          color: COLORS.accentLight,
+          background: `${COLORS.accentPurple}18`,
+          cursor: 'pointer',
+        }}
+      >
+        🎞 成片展示
+      </button>
       {isDone ? (
         <button
           onClick={onReset}
@@ -1687,6 +1727,115 @@ function FinalFilmCard({ onOpenModal, animPhase }) {
   )
 }
 
+// ─── FINISHED FILM GALLERY ───────────────────────────────────────────────────
+function FilmGalleryModal({ open, onClose }) {
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const selectedFilm = FINISHED_FILMS[selectedIndex]
+
+  if (!open) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.86)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative rounded-xl overflow-hidden"
+        style={{
+          background: COLORS.cardBg,
+          border: `1px solid ${COLORS.cardBorder}`,
+          width: 'min(1040px, 92vw)',
+          maxHeight: '88vh',
+          display: 'grid',
+          gridTemplateColumns: '260px minmax(0, 1fr)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex flex-col"
+          style={{
+            borderRight: `1px solid ${COLORS.cardBorder}`,
+            minHeight: 0,
+          }}
+        >
+          <div
+            className="px-4 py-3"
+            style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}
+          >
+            <div className="text-sm font-semibold" style={{ color: COLORS.textPrimary }}>
+              成片展示
+            </div>
+            <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+              已生成作品 · {FINISHED_FILMS.length} 部
+            </div>
+          </div>
+          <div className="p-2 overflow-y-auto">
+            {FINISHED_FILMS.map((film, index) => {
+              const active = index === selectedIndex
+              return (
+                <button
+                  key={film.title}
+                  onClick={() => setSelectedIndex(index)}
+                  className="w-full text-left rounded-lg px-3 py-2 mb-2"
+                  style={{
+                    background: active ? `${COLORS.accentPurple}22` : 'transparent',
+                    border: `1px solid ${active ? `${COLORS.accentPurple}88` : COLORS.cardBorder}`,
+                    color: active ? COLORS.accentLight : COLORS.textSecondary,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div className="text-sm font-semibold">《{film.title}》</div>
+                  <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                    {film.meta}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-col min-w-0">
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}
+          >
+            <div>
+              <div className="font-semibold text-sm" style={{ color: COLORS.textPrimary }}>
+                《{selectedFilm.title}》
+              </div>
+              <div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                {selectedFilm.meta}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-xl leading-none"
+              style={{ color: COLORS.textSecondary, background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="p-4 overflow-y-auto">
+            <video
+              key={selectedFilm.video}
+              controls
+              autoPlay
+              src={selectedFilm.video}
+              className="w-full rounded-lg"
+              style={{
+                background: '#000',
+                border: `1px solid ${COLORS.cardBorder}`,
+                maxHeight: '68vh',
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── VIDEO MODAL ──────────────────────────────────────────────────────────────
 function VideoModal({ open, onClose }) {
   if (!open) return null
@@ -1819,6 +1968,7 @@ export default function App() {
   const allShots = demoData.storyboard[0].scenes.flatMap((s) => s.shots)
   const [selectedShotId, setSelectedShotId] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)
 
   // Animation state
   const [animPhase, setAnimPhase] = useState('empty')
@@ -1936,7 +2086,12 @@ export default function App() {
       {/* Fixed-height viewport section */}
       <div className="flex flex-col" style={{ height: '100vh', overflow: 'hidden' }}>
         {/* Top bar */}
-        <TopBar animPhase={animPhase} onStartDemo={startDemo} onReset={resetDemo} />
+        <TopBar
+          animPhase={animPhase}
+          onStartDemo={startDemo}
+          onReset={resetDemo}
+          onOpenGallery={() => setGalleryOpen(true)}
+        />
 
         {/* Main 3-column area — the framework is always on screen */}
         <div className="flex flex-1 overflow-hidden">
@@ -1974,6 +2129,7 @@ export default function App() {
 
       {/* Modal */}
       <VideoModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <FilmGalleryModal open={galleryOpen} onClose={() => setGalleryOpen(false)} />
     </div>
   )
 }
