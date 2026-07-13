@@ -14,7 +14,9 @@ async function request(path, options = {}) {
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
-    if (response.status === 401 && !skipSubscription) {
+    const subscriptionRequired = response.status === 401
+      || (response.status === 503 && String(body.detail || '').includes('订阅码'))
+    if (subscriptionRequired && !skipSubscription) {
       window.localStorage.removeItem(SUBSCRIPTION_KEY)
       window.dispatchEvent(new CustomEvent('movieagent:subscription-required'))
     }
