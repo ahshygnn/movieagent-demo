@@ -7,6 +7,7 @@ __pycache__/
 venv/
 node_modules/
 movieagent-live-frontend/dist/
+movieagent-mobile-frontend/dist/
 .next/
 pnpm-lock.yaml
 *.mp4

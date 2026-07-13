@@ -1081,8 +1081,16 @@ def _clip_available() -> bool:
         return False
 
 
-# Production deploy: serve the built Vite app from the same origin as the API.
-# API and /outputs mounts are registered first, so they keep precedence.
+# Production deploy: serve both Vite apps from the same origin as the API.
+# More specific mounts must be registered before the desktop catch-all route.
+MOBILE_FRONTEND_DIST = Path(__file__).parent / "movieagent-mobile-frontend" / "dist"
+if MOBILE_FRONTEND_DIST.is_dir():
+    app.mount(
+        "/mobile",
+        StaticFiles(directory=str(MOBILE_FRONTEND_DIST), html=True),
+        name="mobile-frontend",
+    )
+
 FRONTEND_DIST = Path(__file__).parent / "movieagent-live-frontend" / "dist"
 if FRONTEND_DIST.is_dir():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")

@@ -1,0 +1,222 @@
+{
+  "task": {
+    "id": "f6731663-21ed-45e8-9c30-7e743ad2fc7b",
+    "title": "提灯人",
+    "status": "done",
+    "progress": 100,
+    "mode": "final",
+    "resolution": "720p",
+    "shot_duration": "5s",
+    "created_at": "2026-05-08 04:18:00",
+    "finished_at": "2026-05-08 04:58:12"
+  },
+  "story": {
+    "raw_synopsis": "山谷里住着一个叫小满的女孩，每天黄昏她要去点亮山道上的灯。有一天一只发着微光的受伤小鹿跑进了她家，老人说这是传说中的引路鹿，它的光要是灭了山谷就会永远变暗。小满决定去山顶找一个叫初光之泉的地方救小鹿。路上雾很浓很难走，感觉有东西在黑暗里盯着她。到山顶发现泉水干了，只剩一颗小光种。小满想到老人说的话，把自己灯里的光分了一半给小鹿。小鹿的角重新亮了，光种也活了，山谷被照亮了。小满明白了，光是用来分给别人的。",
+    "synopsis": "在一座终年被浓雾笼罩的山谷里,住着一个叫小满的提灯女孩,她的工作是每天黄昏点亮山道上的百盏灯,为夜行的旅人指路。这天傍晚,一只浑身泛着微光、却奄奄一息的小鹿闯进了她的木屋,鹿角上的光正在一点点黯淡下去。小满从村里的老人那里听说过,这是传说中的引路鹿,它的光一旦熄灭,整座山谷将永远陷入黑暗。为了救它,小满决定带着自己的灯,去寻找传说中位于山顶的初光之泉。一路上浓雾越来越浓,她的灯几次险些被山风吹灭,而黑暗中似乎有什么东西在窥视着她。当她终于爬上山顶,却发现初光之泉早已干涸,只剩下一颗微弱跳动的光种。就在小满绝望的时候,她忽然明白了老人话里的深意——光不在泉里,而在提灯人的手中。她轻轻把自己灯里的光,分了一半给怀中的小鹿。刹那间,小鹿的鹿角重新亮起,而那颗光种也随之苏醒,整座山谷第一次被温暖的光芒照亮。小满笑了,她终于懂得,真正的光,是愿意分给别人的那一半。",
+    "characters": [
+      { "name": "小满", "role": "提灯女孩", "color": "#f59e0b" },
+      { "name": "引路鹿", "role": "神秘小鹿", "color": "#a78bfa" },
+      { "name": "山谷老人", "role": "智慧长者", "color": "#34d399" }
+    ]
+  },
+  "storyboard": [
+    {
+      "sub_script": "Sub-Script 1",
+      "sub_script_plot": "在一座终年被浓雾笼罩的山谷里,提灯女孩小满点亮山道百盏灯,引路鹿降临,智者揭示传说,小满踏上上山寻泉之路,历经黑暗顿悟,以灯光唤醒引路鹿与山谷。",
+      "scenes": [
+        {
+          "id": "s1",
+          "scene": "Scene 1",
+          "title": "黄昏点灯",
+          "plot": "黄昏时分，浓雾笼罩的山谷里，提灯女孩小满沿着蜿蜒山道依次点亮百盏路灯。温暖的灯光在雾气中晕开，为夜行旅人照亮归路。这是她每天的使命，平静而庄严。",
+          "tone": "平静、庄重、温暖，带有一丝孤独的使命感",
+          "shots": [
+            {
+              "id": "1-1-1",
+              "number": "1.1.1",
+              "scene": "Scene 1",
+              "shot": "Shot 1",
+              "plot": "黄昏时分，山谷笼罩在浓厚蓝灰色雾气中。小满身着素朴棉布衣裳，手提古旧铜灯，沿石阶伸手点燃悬于木桩上的油灯。火折子触碰灯芯的瞬间，一圈温暖的琥珀色光晕在雾气中缓缓绽开，映亮她专注而平静的侧脸。",
+              "characters": ["小满"],
+              "shotType": "低角度中景（Low-Angle Medium Shot）",
+              "cameraMovement": "慢速推进镜头（Slow Dolly-In），随小满点灯动作向前缓缓推近，在灯光亮起瞬间微微停顿。",
+              "dialogue": "老人说,引路鹿之光若熄灭,山谷将永堕黑暗。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_1_Shot_1.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_1_Shot_1_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            },
+            {
+              "id": "1-1-2",
+              "number": "1.1.2",
+              "scene": "Scene 1",
+              "shot": "Shot 2",
+              "plot": "广角固定镜头凝视山道全景。小满作为渺小的背影立于画面中央偏下，眼前是一条绵延入雾深处的灯路——数十盏琥珀色油灯悬于木桩之上，在蓝灰色雾气中次第发光，宛如繁星落入山间。整条灯路是小满一人所点，孤独、庄重而温暖的使命感弥漫于整个画面。",
+              "characters": ["小满"],
+              "shotType": "广角远景固定镜头（Wide-Angle Long Shot, Static）",
+              "cameraMovement": "固定镜头（Static Shot），无运动，以静制动，让灯光与雾气自然呼吸。",
+              "dialogue": "小满提起灯笼,决定去寻找山顶的初光之泉。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_1_Shot_2.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_1_Shot_2_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            }
+          ]
+        },
+        {
+          "id": "s2",
+          "scene": "Scene 2",
+          "title": "引路鹿降临",
+          "plot": "小满返回木屋后，一只浑身散发微弱银光、却奄奄一息的小鹿跌跌撞撞闯入屋中。鹿角上的光正在一点点黯淡熄灭，小满惊愕之余，心生怜悯，俯身将小鹿抱入怀中。",
+          "tone": "惊愕、怜悯、紧迫，带有奇幻的神圣感",
+          "shots": [
+            {
+              "id": "1-2-1",
+              "number": "1.2.1",
+              "scene": "Scene 2",
+              "shot": "Shot 1",
+              "plot": "从木屋半开的门外视角拍摄，引路鹿踉跄闯入门槛，身上稀薄的银光在昏黄的炉火映衬下忽明忽暗，鹿角尖端的光几近熄灭，仅余一缕白雾般的微芒在门框阴影中飘散。室内暖黄与鹿身冷银形成鲜明双色对比，摇曳光影投落在粗糙的木质地板上，营造出奇幻而紧迫的神圣氛围。",
+              "characters": ["引路鹿"],
+              "shotType": "全景剪影（Full Shot Silhouette）",
+              "cameraMovement": "门槛外静止机位，轻微手持晃动，引路鹿从画面中央踉跄向内移动。",
+              "dialogue": "终年浓雾的山谷里,小满每天黄昏点亮山道的灯。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_2_Shot_1.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_2_Shot_1_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            },
+            {
+              "id": "1-2-2",
+              "number": "1.2.2",
+              "scene": "Scene 2",
+              "shot": "Shot 2",
+              "plot": "小满跪伏于木屋地板上，双手轻轻将引路鹿颤抖的身躯托入怀中，两者四目相对。引路鹿眼中映出远处铜灯的微弱火焰，鹿角尖端仅余将熄的一丝白光，如同即将消散的呼吸。小满面容从惊愕渐渐转为深切的怜悯，手掌感受着那一丝即将消逝的温热银芒。",
+              "characters": ["小满", "引路鹿"],
+              "shotType": "中近景（Medium Close Shot）",
+              "cameraMovement": "缓慢推镜由中景向近景移动，最后轻微上摇至鹿角将熄的光点，全程手持带轻微晃动。",
+              "dialogue": "一只奄奄一息的小鹿闯入木屋,鹿角之光渐渐暗去。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_2_Shot_2.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_2_Shot_2_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            }
+          ]
+        },
+        {
+          "id": "s3",
+          "scene": "Scene 3",
+          "title": "启程寻泉",
+          "plot": "小满抱着小鹿急奔至村中老人处求助。老人向小满讲述了传说：引路鹿的光一旦熄灭，山谷将永堕黑暗，唯有山顶的初光之泉才能救它。小满毅然决定带灯上山。",
+          "tone": "沉重、神秘、坚定，带有古老传说的厚重感",
+          "shots": [
+            {
+              "id": "1-3-1",
+              "number": "1.3.1",
+              "scene": "Scene 3",
+              "shot": "Shot 1",
+              "plot": "老人的屋子里烛光摇曳，四壁挂满泛黄的山谷地图与古旧符咒。老人银发苍颜，端坐于木椅，目光深邃地注视着小满怀中的引路鹿，眉头紧锁。他缓缓开口，声音低沉而沧桑，揭示传说。小满神情从惊慌转为坚定，握紧铜灯的手微微颤抖。伦勃朗式光影在两人面部投下戏剧性明暗。",
+              "characters": ["小满", "山谷老人"],
+              "shotType": "低角度中景双人镜头（Low-angle Medium Two-shot）",
+              "cameraMovement": "在老人揭示传说关键台词时缓慢推近其面部（Slow Dolly-In toward elder）。",
+              "dialogue": "浓雾越来越浓,山风几次险些吹灭她手中的灯。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_3_Shot_1.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_3_Shot_1_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            },
+            {
+              "id": "1-3-2",
+              "number": "1.3.2",
+              "scene": "Scene 3",
+              "shot": "Shot 2",
+              "plot": "极端特写捕捉小满颤抖的手紧握古旧铜灯，指节因用力而泛白。铜灯温暖的金属表面映出烛火光芒，柔焦背景中引路鹿发光的鹿角形成光晕。手的轻微颤抖却握得更紧，是她从惊慌到决心的身体化表达。伦勃朗式光影在掌纹与指缝间投下浓重阴影，强调决定的分量。",
+              "characters": ["小满"],
+              "shotType": "极端特写（Extreme Close-up）",
+              "cameraMovement": "静态镜头（Static Shot），手的微颤传达情绪转化。",
+              "dialogue": "终于登上山顶,她却发现初光之泉早已干涸。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_3_Shot_2.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_3_Shot_2_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            }
+          ]
+        },
+        {
+          "id": "s4",
+          "scene": "Scene 4",
+          "title": "山顶领悟",
+          "plot": "小满抱着引路鹿踏上山顶之路，浓雾越来越深，山风数次险些将铜灯吹灭，黑暗中有幽绿的眼睛在注视她。她咬牙护住灯光，一步一步攀登，在绝望时刻顿悟：光不在泉里，而在提灯人的手中。",
+          "tone": "紧张、恐惧、坚韧，带有黑暗中孤独前行的悲壮感",
+          "shots": [
+            {
+              "id": "1-4-1",
+              "number": "1.4.1",
+              "scene": "Scene 4",
+              "shot": "Shot 1",
+              "plot": "小满在被浓雾彻底吞没的山道上艰难攀登，双臂将引路鹿紧紧抱于胸前，右手护住那盏古旧铜灯。四周是流动的蓝黑色雾墙，铜灯的暖黄光晕是画面中唯一的温度来源，形成孤岛式光源。山风猛烈扑来，灯火剧烈摇曳，小满弓身以斗篷一角裹住灯，一步一步向上挣扎前行。树丛深处隐约闪过成对的幽绿光点，凝视着她。",
+              "characters": ["小满", "引路鹿"],
+              "shotType": "中远景手持跟拍（Medium-Wide Handheld Tracking Shot）",
+              "cameraMovement": "低角度跟拍，手持摄影带有明显纵向与横向颠簸，缓慢向上推进以呼应人物攀登动作，焦点锁定铜灯火焰。",
+              "dialogue": "就在绝望之际,她忽然明白了老人话里的深意。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_4_Shot_1.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_4_Shot_1_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            },
+            {
+              "id": "1-4-2",
+              "number": "1.4.2",
+              "scene": "Scene 4",
+              "shot": "Shot 2",
+              "plot": "极端特写切至小满的面部，铜灯的摇曳暖光在她脸上投下剧烈明灭的光影。灯火在一瞬间几乎彻底熄灭，画面陷入近乎纯黑，小满眼中的恐惧清晰可见——眼眶微红，牙关咬紧，睫毛上凝有雾气水珠。下一瞬间灯火重新燃起，她眼神中的恐惧迅速被坚韧取代，嘴唇抿紧，目光重新向上。",
+              "characters": ["小满"],
+              "shotType": "极端特写含闪切插入（Extreme Close-Up with Flash-Cut Inserts）",
+              "cameraMovement": "静态极端特写，轻微手持微颤；灯火险灭与幽绿眼光处使用极速闪切（Jump Cut）。",
+              "dialogue": "光不在泉里,而在提灯人的手中。",
+              "subtitles": "旁白",
+              "keyframe": "/keyframes/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_4_Shot_2.png",
+              "video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_Sub-Script_1_Scene_4_Shot_2_dubbed.mp4",
+              "kfStatus": "done",
+              "videoStatus": "done"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "logs": [
+    { "time": "04:18:02", "agent": "Director Agent", "msg": "开始分析剧本 synopsis …" },
+    { "time": "04:18:09", "agent": "Director Agent", "msg": "完成，生成 1 个子剧本（Episode 1）" },
+    { "time": "04:18:10", "agent": "Scene Agent", "msg": "处理 Sub-Script 1，规划 4 个场景" },
+    { "time": "04:18:19", "agent": "Scene Agent", "msg": "完成 Sub-Script 1：Scene 1–4，共 8 镜头规划" },
+    { "time": "04:18:21", "agent": "Shot Agent", "msg": "生成 Shot 1.1.1，生成关键帧" },
+    { "time": "04:18:35", "agent": "Shot Agent", "msg": "完成 Shot 1.1.1，关键帧已就绪，视频生成中 (72%)" },
+    { "time": "04:18:41", "agent": "Shot Agent", "msg": "开始处理 Shot 1.1.2 …" },
+    { "time": "04:19:12", "agent": "Shot Agent", "msg": "完成 Shot 1.1.2，视频已就绪" },
+    { "time": "04:21:39", "agent": "Shot Agent", "msg": "完成 Shot 1.2.1，视频已就绪" },
+    { "time": "04:22:19", "agent": "Shot Agent", "msg": "完成 Shot 1.2.2，视频已就绪" },
+    { "time": "04:48:58", "agent": "Shot Agent", "msg": "完成 Shot 1.3.1（含配音），视频已就绪" },
+    { "time": "04:49:47", "agent": "Shot Agent", "msg": "完成 Shot 1.3.2，视频已就绪" },
+    { "time": "04:51:14", "agent": "Shot Agent", "msg": "完成 Shot 1.4.1，视频已就绪" },
+    { "time": "04:57:48", "agent": "Shot Agent", "msg": "完成 Shot 1.4.2，视频已就绪" },
+    { "time": "04:58:05", "agent": "Director Agent", "msg": "拼接成片，共 8 镜，时长 40.36s" },
+    { "time": "04:58:12", "agent": "Director Agent", "msg": "✅ 任务完成，成片已输出" }
+  ],
+  "cost": {
+    "input_tokens": 43671,
+    "output_tokens": 15348,
+    "total_tokens": 59019,
+    "estimated_cost_usd": 0.0862,
+    "model": "claude-sonnet-4-6"
+  },
+  "final_video": "/videos/f6731663-21ed-45e8-9c30-7e743ad2fc7b_tidengman_final.mp4",
+  "film_duration": "40.36s",
+  "showcase_video": "/videos/5b67458a-19fb-4fbd-a215-3c309d45652e_narrated_trimmed_final.mp4"
+}
