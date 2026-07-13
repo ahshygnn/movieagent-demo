@@ -6,7 +6,6 @@ services:
     buildCommand: pip install -r requirements.txt && npm --prefix movieagent-live-frontend ci && npm --prefix movieagent-live-frontend run build
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /api/health
-    maxShutdownDelaySeconds: 300
     autoDeployTrigger: commit
     envVars:
       - key: PYTHON_VERSION
