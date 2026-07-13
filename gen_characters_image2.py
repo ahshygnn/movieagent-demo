@@ -1,5 +1,5 @@
 """
-参数化的人物定妆图生成 CLI（image-2 / gpt-image-2-all，一展平台）。
+参数化的人物定妆图生成 CLI（Seedream 5.0 / 火山方舟）。
 
 从剧本 + 角色名列表，自动提取每人外貌并生成全身正面定妆照到 outputs/characters/。
 与老脚本 generate_characters.py（写死角色 + Seedream）并行，互不影响。
@@ -28,7 +28,7 @@ def _parse_characters(raw: str) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="生成人物全身正面定妆照（image-2）。")
+    parser = argparse.ArgumentParser(description="生成人物全身正面定妆照（Seedream 5.0）。")
     parser.add_argument("--characters", required=True, help="角色名，逗号或空格分隔")
     parser.add_argument("--script", default="", help="剧本文本（直接传字符串）")
     parser.add_argument("--script-file", default="", help="剧本文件路径（UTF-8）")

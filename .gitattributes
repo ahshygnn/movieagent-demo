@@ -1,1 +1,2 @@
-demo-frontend/public/videos/*.mp4 filter=lfs diff=lfs merge=lfs -text
+movieagent-showcase-frontend/public/videos/*.mp4 filter=lfs diff=lfs merge=lfs -text
+movieagent-live-frontend/public/videos/*.mp4 filter=lfs diff=lfs merge=lfs -text

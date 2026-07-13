@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import time
+from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException
@@ -19,6 +20,7 @@ from generation.character import generate_character_references, generate_charact
 from generation.concat import concat_videos
 from generation.postprocess import prepare_dubbing_assets
 from generation.shot_pipeline import build_shot_id, generate_shot_video_artifacts, shot_video_complete
+from script_rewriter import rewrite_script
 
 app = FastAPI(title="MovieAgent Demo API", version="1.0.0")
 
@@ -46,6 +48,11 @@ class GenerateRequest(BaseModel):
     characters: list[str]
     character_refs: dict
     voice_refs: dict = {}
+    raw_script: str = ""
+
+
+class RewriteRequest(BaseModel):
+    raw_script: str
 
 class KeyframeRequest(BaseModel):
     task_id: str
@@ -124,6 +131,19 @@ class AudioRequest(BaseModel):
 
 # ── 接口 ──────────────────────────────────────────────────
 
+@app.get("/api/health", summary="部署健康检查")
+def health_check():
+    return {"status": "ok"}
+
+@app.post("/api/rewrite", summary="改写原始剧本")
+def api_rewrite_script(req: RewriteRequest):
+    try:
+        return rewrite_script(req.raw_script)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
 @app.post("/api/generate", summary="启动完整规划 pipeline")
 def start_generate(req: GenerateRequest, background_tasks: BackgroundTasks):
     task_id = create_task()
@@ -131,6 +151,7 @@ def start_generate(req: GenerateRequest, background_tasks: BackgroundTasks):
     tasks[task_id]["voice_refs"] = req.voice_refs or {}
     # 保存原始剧本与角色名，供人物定妆图生成接口复用
     tasks[task_id]["script_synopsis"] = req.script_synopsis
+    tasks[task_id]["raw_script"] = req.raw_script or req.script_synopsis
     tasks[task_id]["characters"] = req.characters
     background_tasks.add_task(
         run_full_pipeline, task_id, req.script_synopsis, req.characters
@@ -157,7 +178,7 @@ def _script_from_sub_scripts(sub_scripts: dict) -> str:
     return "\n\n".join(p for p in plots if p)
 
 
-@app.post("/api/generate/characters", summary="为剧本人物生成全身正面定妆照（image-2）")
+@app.post("/api/generate/characters", summary="为剧本人物生成全身正面定妆照（Seedream 5.0）")
 def api_generate_characters(req: CharacterGenRequest):
     task = tasks.get(req.task_id)
     if not task:
@@ -186,6 +207,7 @@ def api_generate_characters(req: CharacterGenRequest):
     # 合并写回任务级 character_refs（下游关键帧按 Involving Characters 自动取用）
     refs = out.get("character_refs") or {}
     designs = out.get("designs") or {}
+    errors = out.get("errors") or {}
     tasks[req.task_id].setdefault("character_refs", {})
     tasks[req.task_id]["character_refs"].update(refs)
     # 存 designs（供关键帧反思审核取 Appearance 文本）+ 每角色状态（pending，供人工审核）
@@ -194,7 +216,17 @@ def api_generate_characters(req: CharacterGenRequest):
     tasks[req.task_id].setdefault("character_ref_status", {})
     for name in refs:
         tasks[req.task_id]["character_ref_status"][name] = "pending"
+    for name in errors:
+        tasks[req.task_id]["character_ref_status"][name] = "failed"
+    tasks[req.task_id].setdefault("character_ref_errors", {})
+    tasks[req.task_id]["character_ref_errors"].update(errors)
+    for name in refs:
+        tasks[req.task_id]["character_ref_errors"].pop(name, None)
     save_tasks()
+
+    if errors and not refs:
+        detail = "; ".join(f"{name}: {message}" for name, message in errors.items())
+        raise HTTPException(status_code=502, detail=detail)
 
     return {
         "characters": {
@@ -204,7 +236,7 @@ def api_generate_characters(req: CharacterGenRequest):
             }
             for name, path in refs.items()
         },
-        "errors": out.get("errors") or {},
+        "errors": errors,
         "designs": designs,
     }
 
@@ -462,6 +494,7 @@ def update_shot(req: UpdateShotRequest):
         shot_ref[k] = v
         updated_fields.append(k)
 
+    save_tasks()
     return {"message": "更新成功", "updated_fields": updated_fields}
 
 
@@ -485,6 +518,7 @@ def update_scene(req: UpdateSceneRequest):
         scene_ref[k] = v
         updated_fields.append(k)
 
+    save_tasks()
     return {"message": "更新成功", "updated_fields": updated_fields}
 
 
@@ -718,6 +752,8 @@ def api_generate_final_video(req: FinalVideoRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"拼接视频失败: {e}") from e
 
+    task["final_video_url"] = out_rel
+    save_tasks()
     return {
         "final_video_url": out_rel,
         "concat_method": concat_method,
@@ -830,7 +866,7 @@ def api_generate_audio(req: AudioRequest):
     if not shot_data:
         return {"error": "shot not found"}
 
-    dialogue = shot_data.get("Dialogue") or {}
+    dialogue = shot_data.get("Dialogue") or shot_data.get("Subtitles") or {}
     if not dialogue:
         return {"message": "该Shot没有台词", "audio_files": {}}
 
@@ -1043,3 +1079,10 @@ def _clip_available() -> bool:
         return is_available()
     except Exception:
         return False
+
+
+# Production deploy: serve the built Vite app from the same origin as the API.
+# API and /outputs mounts are registered first, so they keep precedence.
+FRONTEND_DIST = Path(__file__).parent / "movieagent-live-frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")

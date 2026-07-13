@@ -13,15 +13,13 @@ import config
 
 @contextlib.contextmanager
 def _no_proxy():
-    """临时移除代理环境变量，让火山方舟请求直连，用完后还原。"""
-    keys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]
-    saved = {k: os.environ.pop(k, None) for k in keys}
+    """Create an isolated direct session without mutating process-wide proxy state."""
+    session = requests.Session()
+    session.trust_env = False
     try:
-        yield
+        yield session
     finally:
-        for k, v in saved.items():
-            if v is not None:
-                os.environ[k] = v
+        session.close()
 
 # 加在 prompt 前，降低安全过滤误触发概率。风格由 config.VISUAL_STYLE 控制（可经 .env 切换）
 def _safe_prefix() -> str:
@@ -60,12 +58,13 @@ def _call_api(prompt: str, ref_images: list, size: str = "", timeout: int = 150)
     if ref_images:
         payload["image"] = ref_images if len(ref_images) > 1 else ref_images[0]
 
-    resp = requests.post(
-        "https://ark.cn-beijing.volces.com/api/v3/images/generations",
-        headers=headers,
-        json=payload,
-        timeout=timeout,
-    )
+    with _no_proxy() as session:
+        resp = session.post(
+            "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+        )
     if resp.status_code != 200:
         raise Exception(f"Seedream API 请求失败 {resp.status_code}: {resp.text}")
     return resp.json()["data"][0]["url"]
@@ -88,8 +87,7 @@ def _generate_and_download(prompt_core: str, ref_images: list, size: str, target
     image_url = None
     for i, (prompt, images) in enumerate(attempts):
         try:
-            with _no_proxy():
-                image_url = _call_api(prompt, images, size=size)
+            image_url = _call_api(prompt, images, size=size)
             break
         except Exception as e:
             last_err = e
@@ -112,13 +110,13 @@ def _generate_and_download(prompt_core: str, ref_images: list, size: str, target
     last_dl_err = None
     for dl_attempt in range(3):
         try:
-            with _no_proxy():
-                img_resp = requests.get(image_url, timeout=120, stream=True)
-            img_resp.raise_for_status()
-            with open(target_path, "wb") as f:
-                for chunk in img_resp.iter_content(chunk_size=1024 * 256):
-                    if chunk:
-                        f.write(chunk)
+            with _no_proxy() as session:
+                img_resp = session.get(image_url, timeout=120, stream=True)
+                img_resp.raise_for_status()
+                with open(target_path, "wb") as f:
+                    for chunk in img_resp.iter_content(chunk_size=1024 * 256):
+                        if chunk:
+                            f.write(chunk)
             return
         except Exception as e:
             last_dl_err = e

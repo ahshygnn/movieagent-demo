@@ -78,7 +78,7 @@ LLM_MODEL = "claude-sonnet-4-6"
 IMAGE_MODEL = "jimeng_t2i_v40"
 VIDEO_MODEL = "doubao-seedance-1-0-pro-fast-251015"
 # 人物定妆图生成模型（一展平台，走 /v1/chat/completions）
-IMAGE2_MODEL = os.getenv("IMAGE2_MODEL", "gpt-image-2-all").strip()
+CHARACTER_IMAGE_SIZE = os.getenv("CHARACTER_IMAGE_SIZE", "2048x2048").strip()
 # 关键帧质量反思-审核模型（视觉理解，走一展 /v1/chat/completions，OpenAI 兼容多模态）
 REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "gemini-3-flash-preview").strip()
 
