@@ -325,7 +325,7 @@ function SubscriptionDialog({ open, onClose, onVerified }) {
     catch (requestError) { setMessage(requestError.message) }
     finally { setSubmitting(false) }
   }
-  return <><button className="sheet-backdrop border-0" aria-label="关闭订阅码输入" onClick={onClose} /><section className="action-sheet"><div className="flex items-start"><div className="flex-1"><b>解锁完整功能</b><div className="text-xs mt-2 leading-5" style={{ color: COLORS.muted }}>输入项目所有者提供的订阅码后，可使用改写、规划和全部生成能力。</div></div><button className="mobile-icon-button" onClick={onClose}>✕</button></div><input autoFocus className="field mt-4" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} placeholder="请输入订阅码" />{message && <div className="text-xs mt-3" style={{ color: '#fca5a5' }}>{message}</div>}<button className="primary-button w-full mt-3" disabled={!code.trim() || submitting} onClick={submit}>{submitting ? '正在验证…' : '验证并解锁'}</button></section></>
+  return <><button className="sheet-backdrop border-0" aria-label="关闭订阅码输入" onClick={onClose} /><section className="action-sheet"><div className="flex items-start"><div className="flex-1"><b>请输入订阅码</b><div className="text-xs mt-2 leading-5" style={{ color: COLORS.muted }}>输入项目所有者提供的订阅码后，可使用改写、规划和全部生成能力。</div></div><button className="mobile-icon-button" onClick={onClose}>✕</button></div><input autoFocus className="field mt-4" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} placeholder="请输入订阅码" />{message && <div className="text-xs mt-3" style={{ color: '#fca5a5' }}>{message}</div>}<button className="primary-button w-full mt-3" disabled={!code.trim() || submitting} onClick={submit}>{submitting ? '正在验证…' : '验证并解锁'}</button></section></>
 }
 
 function FinalVideo({ src, open, onClose }) {
@@ -400,6 +400,10 @@ export default function App() {
 
   const rewrite = async () => {
     if (!scriptInput.trim()) return
+    if (!hasSubscriptionCode()) {
+      setSubscriptionOpen(true)
+      return
+    }
     setAction('rewrite'); setError('')
     try { const result = await rewriteScript(scriptInput.trim()); setRewritten(result.rewritten || ''); setPhase('rewritten') }
     catch (requestError) { setError(`剧本改写失败：${requestError.message}`) }

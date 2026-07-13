@@ -399,7 +399,7 @@ function SubscriptionModal({ open, onClose, onVerified }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,.78)' }}>
       <div className="w-full p-5 rounded" style={{ maxWidth: '420px', background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}` }}>
-        <div className="flex items-start"><div className="flex-1"><div className="font-semibold">解锁完整功能</div><div className="text-xs mt-2 leading-5" style={{ color: COLORS.textMuted }}>输入由项目所有者提供的订阅码后，可使用改写、规划和全部生成能力。</div></div><button onClick={onClose} className="text-lg bg-transparent border-0" style={{ color: COLORS.textSecondary }} aria-label="关闭">×</button></div>
+        <div className="flex items-start"><div className="flex-1"><div className="font-semibold">请输入订阅码</div><div className="text-xs mt-2 leading-5" style={{ color: COLORS.textMuted }}>输入由项目所有者提供的订阅码后，可使用改写、规划和全部生成能力。</div></div><button onClick={onClose} className="text-lg bg-transparent border-0" style={{ color: COLORS.textSecondary }} aria-label="关闭">×</button></div>
         <label className="block text-xs mt-5" style={{ color: COLORS.textSecondary }}>订阅码<input autoFocus value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} className="w-full mt-2 rounded p-3" style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textPrimary, outline: 'none' }} placeholder="请输入订阅码" /></label>
         {message && <div className="text-xs mt-3" style={{ color: '#fca5a5' }}>{message}</div>}
         <button onClick={submit} disabled={!code.trim() || submitting} className="w-full mt-4 rounded py-3 font-semibold" style={{ border: 0, color: '#1a1410', background: COLORS.accentPurple, opacity: !code.trim() || submitting ? .5 : 1 }}>{submitting ? '正在验证…' : '验证并解锁'}</button>
@@ -2382,6 +2382,10 @@ export default function App() {
   const rewriteCurrentScript = async () => {
     const rawScript = scriptInput.trim()
     if (!rawScript) return
+    if (!hasSubscriptionCode()) {
+      setSubscriptionOpen(true)
+      return
+    }
 
     setError('')
     setRawTyped(rawScript)
