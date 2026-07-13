@@ -1,11 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hmac
 import json
 import os
 import time
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +25,55 @@ from script_rewriter import rewrite_script
 
 app = FastAPI(title="MovieAgent Demo API", version="1.0.0")
 
+CASE_SNAPSHOTS_PATH = Path("data/case_snapshots.json")
+CASE_ASSETS_DIR = Path("case_assets")
+
+
+def _subscription_codes() -> list[str]:
+    raw = os.getenv("SUBSCRIPTION_CODES", "")
+    return [code.strip() for code in raw.replace("\n", ",").split(",") if code.strip()]
+
+
+def _valid_subscription_code(candidate: str) -> bool:
+    return any(hmac.compare_digest(candidate, code) for code in _subscription_codes())
+
+
+def _load_case_snapshots() -> dict:
+    if not CASE_SNAPSHOTS_PATH.exists():
+        return {"cases": []}
+    with CASE_SNAPSHOTS_PATH.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/subscription/verify",
+    "/api/cases",
+}
+
+
+@app.middleware("http")
+async def require_subscription_code(request: Request, call_next):
+    path = request.url.path.rstrip("/") or "/"
+    is_public = path in PUBLIC_API_PATHS or path.startswith("/api/cases/")
+    if request.method == "OPTIONS" or not path.startswith("/api/") or is_public:
+        return await call_next(request)
+
+    configured_codes = _subscription_codes()
+    if not configured_codes:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "订阅码尚未配置，完整功能暂不可用。"},
+        )
+
+    candidate = request.headers.get("X-Subscription-Code", "").strip()
+    if not candidate or not _valid_subscription_code(candidate):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "请输入有效订阅码后使用完整功能。"},
+        )
+    return await call_next(request)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,6 +89,8 @@ os.makedirs("outputs/audio", exist_ok=True)
 os.makedirs("outputs/characters", exist_ok=True)
 os.makedirs("outputs/metrics", exist_ok=True)
 app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+if CASE_ASSETS_DIR.exists():
+    app.mount("/case-assets", StaticFiles(directory=str(CASE_ASSETS_DIR)), name="case-assets")
 
 
 # ── 请求体数据模型 ─────────────────────────────────────────
@@ -53,6 +105,10 @@ class GenerateRequest(BaseModel):
 
 class RewriteRequest(BaseModel):
     raw_script: str
+
+
+class SubscriptionVerifyRequest(BaseModel):
+    code: str
 
 class KeyframeRequest(BaseModel):
     task_id: str
@@ -134,6 +190,30 @@ class AudioRequest(BaseModel):
 @app.get("/api/health", summary="部署健康检查")
 def health_check():
     return {"status": "ok"}
+
+
+@app.post("/api/subscription/verify", summary="验证订阅码")
+def verify_subscription(req: SubscriptionVerifyRequest):
+    if not _subscription_codes():
+        raise HTTPException(status_code=503, detail="订阅码尚未配置，完整功能暂不可用。")
+    if not _valid_subscription_code(req.code.strip()):
+        raise HTTPException(status_code=401, detail="订阅码无效，请检查后重试。")
+    return {"valid": True}
+
+
+@app.get("/api/cases", summary="公开案例列表")
+def list_public_cases():
+    snapshots = _load_case_snapshots()
+    return {"cases": [item["case"] for item in snapshots.get("cases", [])]}
+
+
+@app.get("/api/cases/{case_id}", summary="公开案例只读快照")
+def get_public_case(case_id: str):
+    snapshots = _load_case_snapshots()
+    for item in snapshots.get("cases", []):
+        if item.get("case", {}).get("id") == case_id:
+            return item
+    raise HTTPException(status_code=404, detail="案例不存在。")
 
 @app.post("/api/rewrite", summary="改写原始剧本")
 def api_rewrite_script(req: RewriteRequest):

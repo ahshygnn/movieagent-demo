@@ -6,7 +6,10 @@ import {
   generateFinalVideo,
   generateKeyframe,
   generateVideo,
+  getCase,
   getTask,
+  hasSubscriptionCode,
+  listCases,
   regenerateScenes,
   regenerateShots,
   rewriteScript,
@@ -14,6 +17,7 @@ import {
   taskToDemoData,
   updateScene,
   updateShot,
+  verifySubscriptionCode,
 } from './api'
 
 const EMPTY_DATA = {
@@ -272,7 +276,7 @@ function phaseProgress(animPhase, visibleSceneCount, sceneTotal) {
 }
 
 // ─── TOP BAR ─────────────────────────────────────────────────────────────────
-function TopBar({ animPhase, onStartDemo, onReset, onOpenGallery, taskId }) {
+function TopBar({ animPhase, onReset, onOpenGallery, taskId }) {
   const isDone = animPhase === 'done'
   const isAnimating = animPhase !== 'empty' && animPhase !== 'done'
 
@@ -315,7 +319,7 @@ function TopBar({ animPhase, onStartDemo, onReset, onOpenGallery, taskId }) {
       >
         🎞 成片展示
       </button>
-      {isDone ? (
+      {isDone && (
         <button
           onClick={onReset}
           className="text-xs px-3 py-1 rounded"
@@ -328,30 +332,84 @@ function TopBar({ animPhase, onStartDemo, onReset, onOpenGallery, taskId }) {
         >
           ↺ 重置
         </button>
-      ) : isAnimating ? (
+      )}
+      {isAnimating && (
         <span className="text-xs px-3 py-1 rounded" style={{ color: COLORS.textMuted, border: `1px solid ${COLORS.cardBorder}` }}>
           ⏳ 加载中...
         </span>
-      ) : (
-        <button
-          onClick={onStartDemo}
-          className="text-xs px-3 py-1 rounded font-medium"
-          style={{
-            border: `1px solid ${COLORS.accentPurple}`,
-            color: COLORS.accentLight,
-            background: `${COLORS.accentPurple}18`,
-            cursor: 'pointer',
-          }}
-        >
-          📂 案例展示
-        </button>
       )}
     </div>
   )
 }
 
+function CaseBar({ activeCase, subscribed, onOpenCases, onOpenSubscription }) {
+  return (
+    <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ minHeight: '46px', background: COLORS.pageBg, borderBottom: `1px solid ${COLORS.cardBorder}` }}>
+      <button onClick={onOpenCases} className="text-xs px-3 py-2 rounded font-semibold" style={{ border: `1px solid ${COLORS.accentPurple}`, color: COLORS.accentLight, background: `${COLORS.accentPurple}18` }}>
+        📂 案例展示
+      </button>
+      <span className="text-xs truncate" style={{ color: activeCase ? COLORS.textSecondary : COLORS.textMuted }}>
+        {activeCase ? `正在浏览《${activeCase.title}》 · 只读案例，无需订阅码` : '选择完整案例，可查看剧本、分镜、关键帧、日志与成片'}
+      </span>
+      <div className="flex-1" />
+      <button onClick={onOpenSubscription} className="text-xs px-3 py-2 rounded whitespace-nowrap" style={{ border: `1px solid ${subscribed ? COLORS.statusGreen : COLORS.cardBorder}`, color: subscribed ? COLORS.statusGreen : COLORS.textSecondary, background: 'transparent' }}>
+        {subscribed ? '✓ 完整功能已解锁' : '🔑 输入订阅码'}
+      </button>
+    </div>
+  )
+}
+
+function CasePickerModal({ open, cases, loading, onClose, onSelect }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,.78)' }}>
+      <div className="w-full overflow-hidden rounded" style={{ maxWidth: '760px', maxHeight: '82vh', background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}` }}>
+        <div className="flex items-center px-5 py-4" style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}>
+          <div className="flex-1"><div className="font-semibold">案例展示</div><div className="text-xs mt-1" style={{ color: COLORS.textMuted }}>案例为只读展示，浏览全过程无需订阅码</div></div>
+          <button onClick={onClose} className="text-lg px-2 bg-transparent border-0" style={{ color: COLORS.textSecondary }} aria-label="关闭案例展示">×</button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 p-5 overflow-y-auto" style={{ maxHeight: '68vh' }}>
+          {cases.map((item) => (
+            <button key={item.id} onClick={() => onSelect(item.id)} className="flex gap-3 text-left p-3 rounded" style={{ color: COLORS.textPrimary, background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="flex-shrink-0 overflow-hidden rounded" style={{ width: '116px', aspectRatio: '16 / 9', background: '#090705' }}>
+                {item.preview && <img src={item.preview} alt="" className="w-full h-full object-cover" />}
+              </div>
+              <div className="min-w-0"><div className="font-semibold text-sm">《{item.title}》</div><div className="text-xs mt-2" style={{ color: COLORS.textMuted }}>{item.meta}</div><div className="text-xs mt-2" style={{ color: COLORS.accentLight }}>查看生成过程 →</div></div>
+            </button>
+          ))}
+          {!cases.length && <div className="col-span-2 py-10 text-center text-sm" style={{ color: COLORS.textMuted }}>{loading ? '正在加载案例…' : '暂无可展示案例'}</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SubscriptionModal({ open, onClose, onVerified }) {
+  const [code, setCode] = useState('')
+  const [message, setMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  if (!open) return null
+  const submit = async () => {
+    if (!code.trim()) return
+    setSubmitting(true); setMessage('')
+    try { await verifySubscriptionCode(code.trim()); onVerified(); onClose() }
+    catch (requestError) { setMessage(requestError.message) }
+    finally { setSubmitting(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,.78)' }}>
+      <div className="w-full p-5 rounded" style={{ maxWidth: '420px', background: COLORS.cardBg, border: `1px solid ${COLORS.cardBorder}` }}>
+        <div className="flex items-start"><div className="flex-1"><div className="font-semibold">解锁完整功能</div><div className="text-xs mt-2 leading-5" style={{ color: COLORS.textMuted }}>输入由项目所有者提供的订阅码后，可使用改写、规划和全部生成能力。</div></div><button onClick={onClose} className="text-lg bg-transparent border-0" style={{ color: COLORS.textSecondary }} aria-label="关闭">×</button></div>
+        <label className="block text-xs mt-5" style={{ color: COLORS.textSecondary }}>订阅码<input autoFocus value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} className="w-full mt-2 rounded p-3" style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textPrimary, outline: 'none' }} placeholder="请输入订阅码" /></label>
+        {message && <div className="text-xs mt-3" style={{ color: '#fca5a5' }}>{message}</div>}
+        <button onClick={submit} disabled={!code.trim() || submitting} className="w-full mt-4 rounded py-3 font-semibold" style={{ border: 0, color: '#1a1410', background: COLORS.accentPurple, opacity: !code.trim() || submitting ? .5 : 1 }}>{submitting ? '正在验证…' : '验证并解锁'}</button>
+      </div>
+    </div>
+  )
+}
+
 // ─── LEFT PANEL ──────────────────────────────────────────────────────────────
-function LeftPanel({ animPhase, rawTyped, synopsisTyped, scriptInput, charactersInput, resumeTaskId, onResumeTaskIdChange, onResumeTask, onScriptChange, onCharactersChange, onRewrite, onStartPlanning, onGenerateCharacters, taskId, actionStatus, error }) {
+function LeftPanel({ animPhase, rawTyped, synopsisTyped, scriptInput, charactersInput, onScriptChange, onCharactersChange, onRewrite, onStartPlanning, onGenerateCharacters, taskId, actionStatus, error }) {
   const { characters } = currentData.story
 
   const hasSynopsis = !['empty', 'typing_raw', 'rewriting'].includes(animPhase)
@@ -399,16 +457,6 @@ function LeftPanel({ animPhase, rawTyped, synopsisTyped, scriptInput, characters
           style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textSecondary, outline: 'none' }}
         />
       </div>
-
-      {animPhase === 'empty' && (
-        <div>
-          <div className="text-xs font-medium mb-1" style={{ color: COLORS.textMuted }}>恢复已有任务</div>
-          <div className="flex gap-1">
-            <input value={resumeTaskId} onChange={(event) => onResumeTaskIdChange(event.target.value)} placeholder="Task ID" className="flex-1 min-w-0 text-xs rounded p-2" style={{ background: COLORS.pageBg, border: `1px solid ${COLORS.cardBorder}`, color: COLORS.textSecondary, outline: 'none' }} />
-            <button onClick={onResumeTask} disabled={!resumeTaskId.trim()} className="text-xs px-2 rounded" style={{ background: COLORS.accentPurple, color: '#1a1410', opacity: resumeTaskId.trim() ? 1 : 0.5 }}>加载</button>
-          </div>
-        </div>
-      )}
 
       {/* Rewritten Synopsis — container always present, fills in when改写完成 */}
       <div>
@@ -2222,6 +2270,12 @@ export default function App() {
   const [selectedShotId, setSelectedShotId] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [casePickerOpen, setCasePickerOpen] = useState(false)
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false)
+  const [subscribed, setSubscribed] = useState(() => hasSubscriptionCode())
+  const [publicCases, setPublicCases] = useState([])
+  const [casesLoading, setCasesLoading] = useState(true)
+  const [activeCase, setActiveCase] = useState(null)
   const [scriptInput, setScriptInput] = useState('')
   const [charactersInput, setCharactersInput] = useState('')
   const [resumeTaskId, setResumeTaskId] = useState(() => window.localStorage.getItem('movieagent-task-id') || '')
@@ -2243,6 +2297,17 @@ export default function App() {
     timersRef.current.forEach((t) => clearInterval(t))
     timersRef.current = []
   }
+
+  useEffect(() => {
+    let cancelled = false
+    listCases()
+      .then((result) => { if (!cancelled) setPublicCases(result.cases || []) })
+      .catch((requestError) => { if (!cancelled) setError(`案例列表加载失败：${requestError.message}`) })
+      .finally(() => { if (!cancelled) setCasesLoading(false) })
+    const requireSubscription = () => { setSubscribed(false); setSubscriptionOpen(true) }
+    window.addEventListener('movieagent:subscription-required', requireSubscription)
+    return () => { cancelled = true; window.removeEventListener('movieagent:subscription-required', requireSubscription) }
+  }, [])
 
   const startDemo = useCallback(() => {
     clearAllTimers()
@@ -2352,6 +2417,7 @@ export default function App() {
     }
 
     setError('')
+    setActiveCase(null)
     setScriptInput(rawScript)
     setCharactersInput(characters.join('，'))
     setSelectedShotId('')
@@ -2459,6 +2525,36 @@ export default function App() {
       setError(`加载任务失败：${requestError.message}`)
     } finally {
       setActionStatus('')
+    }
+  }
+
+  const loadPublicCase = async (caseId) => {
+    setCasesLoading(true)
+    setError('')
+    try {
+      const result = await getCase(caseId)
+      const { task, script, characters } = result
+      clearAllTimers()
+      currentData = taskToDemoData(result.case.task_id, task, script, characters)
+      currentData.task.title = result.case.title
+      requestRef.current = { script, rawScript: task.raw_script || script, characters }
+      const scenes = currentData.storyboard.flatMap((item) => item.scenes || [])
+      const firstShot = scenes.flatMap((scene) => scene.shots || [])[0]
+      setScriptInput(task.raw_script || script)
+      setCharactersInput(characters.join('，'))
+      setRawTyped(task.raw_script || script)
+      setSynopsisTyped(script)
+      setVisibleSceneCount(scenes.length)
+      setSelectedShotId(firstShot?.id || '')
+      setTaskId('')
+      setActiveCase(result.case)
+      setAnimPhase('done')
+      setDataVersion((value) => value + 1)
+      setCasePickerOpen(false)
+    } catch (requestError) {
+      setError(`案例加载失败：${requestError.message}`)
+    } finally {
+      setCasesLoading(false)
     }
   }
 
@@ -2590,6 +2686,7 @@ export default function App() {
     setSynopsisTyped('')
     setVisibleSceneCount(0)
     setSelectedShotId('')
+    setActiveCase(null)
   }
 
   const sceneTotal = currentData.storyboard.flatMap((item) => item.scenes || []).length
@@ -2623,10 +2720,16 @@ export default function App() {
         {/* Top bar */}
         <TopBar
           animPhase={animPhase}
-          onStartDemo={startDemo}
           onReset={resetDemo}
           onOpenGallery={() => setGalleryOpen(true)}
           taskId={taskId}
+        />
+
+        <CaseBar
+          activeCase={activeCase}
+          subscribed={subscribed}
+          onOpenCases={() => setCasePickerOpen(true)}
+          onOpenSubscription={() => setSubscriptionOpen(true)}
         />
 
         {/* Main 3-column area — the framework is always on screen */}
@@ -2637,9 +2740,6 @@ export default function App() {
             synopsisTyped={synopsisTyped}
             scriptInput={scriptInput}
             charactersInput={charactersInput}
-            resumeTaskId={resumeTaskId}
-            onResumeTaskIdChange={setResumeTaskId}
-            onResumeTask={resumeExistingTask}
             onScriptChange={handleScriptChange}
             onCharactersChange={setCharactersInput}
             onRewrite={rewriteCurrentScript}
@@ -2699,11 +2799,13 @@ export default function App() {
       </div>
 
       {/* Tech showcase */}
-      {animPhase === 'done' && !taskId && <TechShowcase />}
+      {animPhase === 'done' && !taskId && !activeCase && <TechShowcase />}
 
       {/* Modal */}
       <VideoModal open={modalOpen} onClose={() => setModalOpen(false)} />
       <FilmGalleryModal open={galleryOpen} onClose={() => setGalleryOpen(false)} />
+      <CasePickerModal open={casePickerOpen} cases={publicCases} loading={casesLoading} onClose={() => setCasePickerOpen(false)} onSelect={loadPublicCase} />
+      <SubscriptionModal open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} onVerified={() => setSubscribed(true)} />
     </div>
   )
 }

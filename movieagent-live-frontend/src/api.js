@@ -1,16 +1,49 @@
 const CHARACTER_COLORS = ['#f59e0b', '#a78bfa', '#34d399', '#60a5fa', '#fb7185']
+const SUBSCRIPTION_KEY = 'movieagent-subscription-code'
 
 async function request(path, options = {}) {
+  const { skipSubscription = false, ...fetchOptions } = options
+  const subscriptionCode = window.localStorage.getItem(SUBSCRIPTION_KEY) || ''
   const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
+    ...fetchOptions,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(!skipSubscription && subscriptionCode ? { 'X-Subscription-Code': subscriptionCode } : {}),
+      ...fetchOptions.headers,
+    },
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
+    if (response.status === 401 && !skipSubscription) {
+      window.localStorage.removeItem(SUBSCRIPTION_KEY)
+      window.dispatchEvent(new CustomEvent('movieagent:subscription-required'))
+    }
     throw new Error(body.detail || body.error || `请求失败 (${response.status})`)
   }
   if (body.error) throw new Error(body.error)
   return body
+}
+
+export function listCases() {
+  return request('/api/cases', { skipSubscription: true })
+}
+
+export function getCase(caseId) {
+  return request(`/api/cases/${caseId}`, { skipSubscription: true })
+}
+
+export async function verifySubscriptionCode(code) {
+  const result = await request('/api/subscription/verify', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+    skipSubscription: true,
+  })
+  window.localStorage.setItem(SUBSCRIPTION_KEY, code)
+  return result
+}
+
+export function hasSubscriptionCode() {
+  return Boolean(window.localStorage.getItem(SUBSCRIPTION_KEY))
 }
 
 export function rewriteScript(rawScript) {
@@ -179,12 +212,17 @@ export function taskToDemoData(taskId, task, scriptSynopsis, requestedCharacters
   })
 
   const characterList = task.characters?.length ? task.characters : requestedCharacters?.length ? requestedCharacters : plannedCharacters
+  const assetUrl = (value, fallbackBase) => {
+    const text = String(value || '')
+    if (text.startsWith('/')) return text
+    return `${fallbackBase}/${text.split(/[\\/]/).pop()}`
+  }
   const characters = characterList.map((name, index) => ({
     name,
     role: '',
     color: CHARACTER_COLORS[index % CHARACTER_COLORS.length],
     image: task.character_refs?.[name]
-      ? `/outputs/characters/${String(task.character_refs[name]).split(/[\\/]/).pop()}`
+      ? assetUrl(task.character_refs[name], '/outputs/characters')
       : '',
   }))
   const totalTokens = (task.cost?.input_tokens || 0) + (task.cost?.output_tokens || 0)

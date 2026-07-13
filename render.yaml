@@ -20,6 +20,8 @@ services:
         value: https://vip.yi-zhan.top/v1/
       - key: SILICONFLOW_API_KEY
         sync: false
+      - key: SUBSCRIPTION_CODES
+        sync: false
       - key: CHARACTER_IMAGE_SIZE
         value: 2048x2048
       - key: ENABLE_DUBBING
