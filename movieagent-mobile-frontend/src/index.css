@@ -149,6 +149,28 @@ textarea { resize: vertical; }
 .shot-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
 .shot-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
+.shot-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #2d2018;
+}
+
+.shot-card-action {
+  min-height: 40px;
+  border: 1px solid #4b3525;
+  border-radius: 6px;
+  background: #17120e;
+  color: #c4b8ad;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.shot-card-action.generate { border-color: #9b6811; color: #f6b83e; }
+.shot-card-action:disabled { opacity: 0.38; }
+
 .chip { display: inline-flex; min-height: 28px; align-items: center; padding: 0 9px; border: 1px solid #4a3425; border-radius: 6px; color: #aa9d91; font-size: 12px; }
 
 .progress-dock {

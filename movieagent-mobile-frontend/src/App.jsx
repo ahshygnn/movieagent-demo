@@ -169,11 +169,15 @@ function PlaceholderCard({ index }) {
         <div className="shot-thumb flex items-center justify-center text-xs" style={{ color: COLORS.muted }}>16:9<br />关键帧</div>
         <div className="text-sm leading-6" style={{ color: COLORS.secondary }}>{hints[index]}</div>
       </div>
+      <div className="shot-card-actions">
+        <button type="button" className="shot-card-action" disabled>✎ 编辑</button>
+        <button type="button" className="shot-card-action generate" disabled>✦ 生成</button>
+      </div>
     </div>
   )
 }
 
-function StoryboardScreen({ data, selectedShotId, onSelect, onEdit }) {
+function StoryboardScreen({ data, selectedShotId, action, actionShotId, canGenerate, onSelect, onEdit, onGenerate }) {
   const shots = allShots(data)
   return (
     <main className="mobile-content">
@@ -191,7 +195,6 @@ function StoryboardScreen({ data, selectedShotId, onSelect, onEdit }) {
               <div className="flex items-center gap-2 mb-3">
                 <h3 className="m-0 text-sm font-bold flex-1">{shot.scene} · {shot.shot}</h3>
                 <span className="shot-status" style={{ color: status.color }}>{status.text}</span>
-                <button className="border-0 bg-transparent text-lg" style={{ color: COLORS.secondary }} onClick={(event) => { event.stopPropagation(); onEdit(shot.id) }} aria-label="编辑镜头">⋯</button>
               </div>
               <div className="grid grid-cols-[42%_minmax(0,1fr)] gap-3">
                 <div className="shot-thumb">
@@ -206,6 +209,12 @@ function StoryboardScreen({ data, selectedShotId, onSelect, onEdit }) {
                 <span>▣ {shot.cameraMovement?.split(/[（(]/)[0] || '静态'}</span>
                 <span>▦ {shot.shotType?.split(/[（(]/)[0] || '景别'}</span>
                 <span className="text-right">◷ 5s</span>
+              </div>
+              <div className="shot-card-actions" onClick={(event) => event.stopPropagation()}>
+                <button type="button" className="shot-card-action" onClick={() => onEdit(shot.id)} aria-label={`编辑 ${shot.scene} ${shot.shot}`}>✎ 编辑</button>
+                <button type="button" className="shot-card-action generate" disabled={!canGenerate || Boolean(action)} onClick={() => onGenerate(shot.id)} aria-label={`生成 ${shot.scene} ${shot.shot}`}>
+                  {action && actionShotId === shot.id ? '生成中…' : '✦ 生成'}
+                </button>
               </div>
             </article>
           )
@@ -299,7 +308,7 @@ function BottomNav({ section, onSection, onGenerate, onFilm }) {
 
 function GenerateSheet({ open, onClose, shot, taskId, phase, action, onGenerate, onPlan, onFinal }) {
   if (!open) return null
-  return <><button className="sheet-backdrop border-0" aria-label="关闭生成菜单" onClick={onClose} /><section className="action-sheet"><div className="flex items-center justify-between mb-3"><b>生成操作</b><button className="mobile-icon-button" onClick={onClose}>✕</button></div>{!taskId ? <button className="primary-button w-full" onClick={() => { onClose(); onPlan() }}>🎬 开始规划</button> : <div className="sheet-grid">{[['keyframe', '▧ 生成关键帧'], ['video', '▶ 生成视频'], ['audio', '♫ 生成音频']].map(([type, label]) => <button className="secondary-button" key={type} disabled={!shot || Boolean(action)} onClick={() => { onClose(); onGenerate(type, shot) }}>{label}</button>)}<button className="primary-button" disabled={phase !== 'done' || Boolean(action)} onClick={() => { onClose(); onFinal() }}>🎞 合成成片</button></div>}</section></>
+  return <><button className="sheet-backdrop border-0" aria-label="关闭生成菜单" onClick={onClose} /><section className="action-sheet"><div className="flex items-center justify-between mb-3"><div><b>生成操作</b>{shot && <div className="text-xs mt-1" style={{ color: COLORS.muted }}>{shot.scene} · {shot.shot}</div>}</div><button className="mobile-icon-button" onClick={onClose}>✕</button></div>{!taskId ? <button className="primary-button w-full" onClick={() => { onClose(); onPlan() }}>🎬 开始规划</button> : <div className="sheet-grid">{[['keyframe', '▧ 生成关键帧'], ['video', '▶ 生成视频'], ['audio', '♫ 生成音频']].map(([type, label]) => <button className="secondary-button" key={type} disabled={!shot || Boolean(action)} onClick={() => { onClose(); onGenerate(type, shot) }}>{label}</button>)}<button className="primary-button" disabled={phase !== 'done' || Boolean(action)} onClick={() => { onClose(); onFinal() }}>🎞 合成成片</button></div>}</section></>
 }
 
 function Gallery({ open, onClose }) {
@@ -325,7 +334,7 @@ function SubscriptionDialog({ open, onClose, onVerified }) {
     catch (requestError) { setMessage(requestError.message) }
     finally { setSubmitting(false) }
   }
-  return <><button className="sheet-backdrop border-0" aria-label="关闭订阅码输入" onClick={onClose} /><section className="action-sheet"><div className="flex items-start"><div className="flex-1"><b>请输入订阅码</b><div className="text-xs mt-2 leading-5" style={{ color: COLORS.muted }}>输入项目所有者提供的订阅码后，可使用改写、规划和全部生成能力。</div></div><button className="mobile-icon-button" onClick={onClose}>✕</button></div><input autoFocus className="field mt-4" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} placeholder="请输入订阅码" />{message && <div className="text-xs mt-3" style={{ color: '#fca5a5' }}>{message}</div>}<button className="primary-button w-full mt-3" disabled={!code.trim() || submitting} onClick={submit}>{submitting ? '正在验证…' : '验证并解锁'}</button></section></>
+  return <><button className="sheet-backdrop border-0" aria-label="关闭订阅码输入" onClick={onClose} /><section className="action-sheet"><div className="flex items-start"><div className="flex-1"><b>请输入订阅码</b><div className="text-xs mt-2 leading-5" style={{ color: COLORS.muted }}>输入项目所有者提供的订阅码后，可使用改写、规划和全部生成能力。若暂无订阅码，可点击左上角“案例展示”，预览基础功能。</div></div><button className="mobile-icon-button" onClick={onClose}>✕</button></div><input autoFocus className="field mt-4" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} placeholder="请输入订阅码" />{message && <div className="text-xs mt-3" style={{ color: '#fca5a5' }}>{message}</div>}<button className="primary-button w-full mt-3" disabled={!code.trim() || submitting} onClick={submit}>{submitting ? '正在验证…' : '验证并解锁'}</button></section></>
 }
 
 function FinalVideo({ src, open, onClose }) {
@@ -343,6 +352,7 @@ export default function App() {
   const [taskId, setTaskId] = useState('')
   const [phase, setPhase] = useState('empty')
   const [action, setAction] = useState('')
+  const [actionShotId, setActionShotId] = useState('')
   const [error, setError] = useState('')
   const [generateOpen, setGenerateOpen] = useState(false)
   const [galleryOpen, setGalleryOpen] = useState(false)
@@ -431,10 +441,10 @@ export default function App() {
   const generateArtifact = async (type, shot) => {
     if (!taskId || !shot) return
     const calls = { keyframe: generateKeyframe, video: generateVideo, audio: generateAudio }
-    setAction(type); setError('')
+    setAction(type); setActionShotId(shot.id); setError('')
     try { await calls[type](taskId, shot); await refreshTask() }
     catch (requestError) { setError(`${type === 'keyframe' ? '关键帧' : type === 'video' ? '视频' : '音频'}生成失败：${requestError.message}`) }
-    finally { setAction('') }
+    finally { setAction(''); setActionShotId('') }
   }
 
   const saveShot = async (shot, draft) => {
@@ -487,10 +497,11 @@ export default function App() {
   }
 
   const resetWorkspace = () => {
-    setData(EMPTY_DATA); setScriptInput(''); setRewritten(''); setCharactersInput(''); setTaskId(''); setPhase('empty'); setError(''); setActiveCase(null); setSelectedShotId(''); setSection('input')
+    setData(EMPTY_DATA); setScriptInput(''); setRewritten(''); setCharactersInput(''); setTaskId(''); setPhase('empty'); setActionShotId(''); setError(''); setActiveCase(null); setSelectedShotId(''); setSection('input')
   }
 
   const openShot = (id) => { setSelectedShotId(id); setSection('editor') }
+  const openShotGenerate = (id) => { setSelectedShotId(id); setGenerateOpen(true) }
   const state = { data, phase, action, taskId, scriptInput, charactersInput, rewritten }
   const actions = { setScriptInput, setCharactersInput, rewrite, startPlanning: startLive, generateCharacters: generateCharacterRefs }
 
@@ -501,7 +512,7 @@ export default function App() {
       {error && <div className="mx-4 mt-3 p-3 text-sm rounded-md" style={{ color: '#fecaca', background: '#7f1d1d44', border: '1px solid #ef444466' }}>{error}<button className="float-right bg-transparent border-0" style={{ color: '#fecaca' }} onClick={() => setError('')}>✕</button></div>}
       <WorkflowTabs section={section} onChange={setSection} />
       {section === 'input' && <InputScreen state={state} actions={actions} />}
-      {section === 'storyboard' && <StoryboardScreen data={data} selectedShotId={selectedShotId} onSelect={setSelectedShotId} onEdit={openShot} />}
+      {section === 'storyboard' && <StoryboardScreen data={data} selectedShotId={selectedShotId} action={action} actionShotId={actionShotId} canGenerate={Boolean(taskId)} onSelect={setSelectedShotId} onEdit={openShot} onGenerate={openShotGenerate} />}
       {section === 'editor' && <ShotEditorScreen shot={selectedShot} taskId={taskId} action={action} onSave={saveShot} onGenerate={generateArtifact} onRegenerate={regenerate} />}
       {section === 'task' && <TaskScreen data={data} phase={phase} progress={progress} taskId={taskId} action={action} activeCase={activeCase} onFinal={generateFinal} onPlay={() => setVideoOpen(true)} />}
       <ProgressDock progress={progress} active={Boolean(taskId) && phase !== 'done'} />
